@@ -43,7 +43,10 @@ impl GenerationPaths {
         Self::under(Path::new("/"))
     }
 
-    /// Marker locations below `root`, for tests and offline inspection.
+    /// Marker locations below `root`, for tests.
+    ///
+    /// Not for inspecting another machine's tree: the system profile and `/run/booted-system` are
+    /// absolute symlinks into `/nix/store`, which resolve on the inspecting machine.
     pub fn under(root: &Path) -> Self {
         Self {
             desired: root.join("mnt/limanix/flake/runtime.json"),

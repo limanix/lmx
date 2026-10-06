@@ -111,9 +111,12 @@ mod tests {
 
     #[test]
     fn stops_waiting_for_a_tool_that_hangs() {
+        // The sleep stays shorter than `TIMEOUT`. On macOS a pipe becomes close-on-exec only after
+        // it is created, so a pipe another test creates at that moment can leak into the sleep,
+        // and that test then waits for the sleep to exit.
         let started = Instant::now();
-        let error = shell("exec sleep 5", Duration::from_millis(100)).expect_err("sleep hangs");
+        let error = shell("exec sleep 2", Duration::from_millis(100)).expect_err("sleep hangs");
         assert!(matches!(error, FactError::Timeout { .. }), "{error}");
-        assert!(started.elapsed() < Duration::from_secs(2));
+        assert!(started.elapsed() < Duration::from_millis(1500));
     }
 }

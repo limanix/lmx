@@ -2,24 +2,14 @@
 
 use std::{io, process::ExitCode};
 
-use lmx_model::{CONTRACT_VERSION, Envelope};
-use serde::Serialize;
+use lmx_model::{CONTRACT_VERSION, Envelope, Version};
 
 use crate::{cli::OutputArgs, output};
-
-/// Version answer of the host contract.
-#[derive(Debug, Serialize)]
-pub(crate) struct Version {
-    /// Release version of the binary.
-    version: &'static str,
-    /// Host contract version.
-    contract: u32,
-}
 
 /// Runs `lmx version`.
 pub(crate) fn run(args: &OutputArgs) -> io::Result<ExitCode> {
     let version = Version {
-        version: env!("CARGO_PKG_VERSION"),
+        version: env!("CARGO_PKG_VERSION").to_owned(),
         contract: CONTRACT_VERSION,
     };
     if args.json {

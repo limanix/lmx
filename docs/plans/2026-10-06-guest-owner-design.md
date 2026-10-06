@@ -1,7 +1,9 @@
 # LimaNix guest owner: `lmx` and `lmxd`
 
 Status: design agreed on 2026-10-06. M1a is implemented: repository, contract model, facts,
-`lmx status`, release pipeline. See [the M1a plan](2026-10-06-m1a-lmx-foundation.md).
+`lmx status`, release pipeline. See [the M1a plan](2026-10-06-m1a-lmx-foundation.md). M1b is
+implemented: help, info, welcome, clipboard and sessions in the binary. See
+[the M1b plan](2026-10-06-m1b-lmx-user-surface.md).
 
 Scope: this repository, plus the changes it requires in `client` (host and
 platform base) and `modules` (catalog).

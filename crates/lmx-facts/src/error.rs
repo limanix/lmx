@@ -44,7 +44,7 @@ pub enum FactError {
         /// How long the reader waited.
         timeout: Duration,
     },
-    /// A program's output did not have the expected shape.
+    /// A program's output or a system file did not have the expected shape.
     #[error("unexpected {what} output: {detail}")]
     Parse {
         /// Which output was parsed.

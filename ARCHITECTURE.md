@@ -12,32 +12,39 @@ Exact contracts live in the Rust source and its module-level documentation.
 ```text
 NixOS ──► /etc/lmx/config.json ──► lmx-model::Config
                                         │
-person or host ──► lmx (binary) ──► lmx-facts readers ──► statvfs, ip, systemctl, markers
+person or host ──► lmx (binary) ──► lmx-facts readers ──► statvfs, /proc, uname, ip, systemctl, markers
                          │
-                         └──► lmx-model::Envelope<T> ──► text or JSON on standard output
+                         ├──► lmx-model::Envelope<T> ──► text or JSON on standard output
+                         └──► the caller's terminal or tmux, the session provider
 ```
 
 `lmx-model` holds every value that crosses a boundary: the configuration written by NixOS and the answers read by the host.
 `lmx-facts` reads the running system. The `lmx` binary parses the command line, combines facts, and renders them.
+Caller commands, the welcome, the clipboard and sessions, depend on the caller's terminal and environment; the welcome also reads facts.
 
 ## Boundaries to preserve
 
-- Values that cross a process boundary belong in `lmx-model`; a field added elsewhere is not part of any contract. The `lmx version` answer still lives in the binary and moves to `lmx-model` in M1b.
+- Values that cross a process boundary belong in `lmx-model`; a field added elsewhere is not part of any contract.
 - `lmx-facts` performs reads only. It never changes the system and never needs a daemon.
 - A reader that runs a program splits process I/O from a pure parser; tests cover the parser with fixed output.
 - The host contract changes only as described in [Change the host contract](docs/contract.md#change-the-host-contract).
 - Configuration comes from NixOS. The binaries never accept configuration from the host at runtime.
 - Every crate forbids unsafe Rust with `#![forbid(unsafe_code)]`.
+- Caller commands need the caller's terminal and environment, so they stay in the `lmx` process and never move into a daemon.
+- `pbcopy`, `pbpaste` and `limanix-session` keep the syntax of the shell commands they replaced; change them together with the platform.
 
 ## Source map
 
-| Area              | Responsibility                                  | Start here                                            |
-| ----------------- | ----------------------------------------------- | ----------------------------------------------------- |
-| Contract types    | Configuration, envelope, error codes and status | [`lmx-model/src/lib.rs`](crates/lmx-model/src/lib.rs) |
-| Fact readers      | Disk, generations, network and failed units     | [`lmx-facts/src/lib.rs`](crates/lmx-facts/src/lib.rs) |
-| Command line      | Commands, output selection and exit codes       | [`lmx/src/main.rs`](crates/lmx/src/main.rs)           |
-| Status            | Collecting facts and rendering them             | [`lmx/src/status.rs`](crates/lmx/src/status.rs)       |
-| Contract examples | Published answers of each contract version      | [`contract/v1/`](contract/v1)                         |
+| Area              | Responsibility                                                 | Start here                                            |
+| ----------------- | -------------------------------------------------------------- | ----------------------------------------------------- |
+| Contract types    | Configuration, envelope, error codes, status and version       | [`lmx-model/src/lib.rs`](crates/lmx-model/src/lib.rs) |
+| Fact readers      | Disk, generations, machine, mounts, network and failed units   | [`lmx-facts/src/lib.rs`](crates/lmx-facts/src/lib.rs) |
+| Command line      | Commands, other names, output selection and exit codes         | [`lmx/src/main.rs`](crates/lmx/src/main.rs)           |
+| Status            | Collecting facts and rendering them                            | [`lmx/src/status.rs`](crates/lmx/src/status.rs)       |
+| Guest pages       | Help, info and the welcome for people in the guest             | [`lmx/src/welcome.rs`](crates/lmx/src/welcome.rs)     |
+| Terminal text     | Columns, wrapping and the palette                              | [`lmx/src/layout.rs`](crates/lmx/src/layout.rs)       |
+| Caller commands   | The clipboard through the terminal or tmux, and named sessions | [`lmx/src/clipboard.rs`](crates/lmx/src/clipboard.rs) |
+| Contract examples | Published answers of each contract version                     | [`contract/v1/`](contract/v1)                         |
 
 Files outside `crates/` provide executable context:
 
@@ -54,4 +61,5 @@ Files outside `crates/` provide executable context:
 1. Collect it in `lmx/src/status.rs` with `record`, so a failure becomes a problem instead of an error.
 1. Render it in the text output and extend `crates/lmx/tests/cli.rs`.
 
+A fact that only a guest page shows, such as `mounts` and `machine`, skips steps 1 and 3.
 A new optional field is a compatible change. Renaming or removing a field needs a new contract version.

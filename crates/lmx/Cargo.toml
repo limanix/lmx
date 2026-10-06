@@ -10,11 +10,14 @@ homepage.workspace     = true
 publish = false
 
 [dependencies]
-clap       = { workspace = true }
-lmx-facts  = { workspace = true }
-lmx-model  = { workspace = true }
-serde      = { workspace = true }
-serde_json = { workspace = true }
+base64        = { workspace = true }
+clap          = { workspace = true }
+lmx-facts     = { workspace = true }
+lmx-model     = { workspace = true }
+rustix        = { workspace = true, features = ["event", "termios"] }
+serde         = { workspace = true }
+serde_json    = { workspace = true }
+unicode-width = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

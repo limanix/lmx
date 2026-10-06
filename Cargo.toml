@@ -11,14 +11,16 @@ repository   = "https://github.com/limanix/lmx"
 homepage     = "https://limanix.dev"
 
 [workspace.dependencies]
-lmx-facts  = { path = "crates/lmx-facts" }
-lmx-model  = { path = "crates/lmx-model" }
-clap       = { version = "4.6.6", features = ["derive"] }
-rustix     = { version = "1.1.4", features = ["fs"] }
-serde      = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
-tempfile   = "3.27.0"
-thiserror  = "2.0.20"
+lmx-facts     = { path = "crates/lmx-facts" }
+lmx-model     = { path = "crates/lmx-model" }
+base64        = "0.23.1"
+clap          = { version = "4.6.6", features = ["derive"] }
+rustix        = { version = "1.1.4", features = ["fs", "system"] }
+serde         = { version = "1.0.229", features = ["derive"] }
+serde_json    = "1.0.151"
+tempfile      = "3.27.0"
+thiserror     = "2.0.20"
+unicode-width = "0.2.2"
 
 [workspace.lints.rust]
 missing_debug_implementations = "warn"

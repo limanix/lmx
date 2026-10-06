@@ -24,18 +24,28 @@ person ───────► lmx <command>              ──► text for pe
 
 ## Commands
 
-| Command       | Answers                                                                                   |
-| ------------- | ----------------------------------------------------------------------------------------- |
-| `lmx status`  | Desired, built and booted generations; store disk usage; interfaces; failed systemd units |
-| `lmx version` | The binary version and the host contract version                                          |
+| Command               | Answers or does                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------- |
+| `lmx help`            | The workspace and the commands inside the VM and on the Mac; also `lmx`, `lmx -h`         |
+| `lmx info`            | The kernel, guest disk, shared folders and failed units                                   |
+| `lmx welcome`         | The summary an interactive shell prints when it starts                                    |
+| `lmx status`          | Desired, built and booted generations; store disk usage; interfaces; failed systemd units |
+| `lmx version`         | The binary version and the host contract version                                          |
+| `lmx clipboard copy`  | Copies standard input to the Mac clipboard                                                |
+| `lmx clipboard paste` | Prints the Mac clipboard, if the terminal allows reads                                    |
+| `lmx session NAME`    | Opens a named session with the provider that the selected modules configure               |
 
-Add `--json` to answer with the [host contract](docs/contract.md).
+Add `--json` to `status` and `version` to answer with the [host contract](docs/contract.md).
 `lmx status` reads every fact independently: an unreadable fact is reported as a problem, and the others are still answered.
+
+Started under the name `pbcopy`, `pbpaste` or `limanix-session`, the binary keeps the arguments, messages and exit statuses of the shell command it replaces.
 
 ## Boundaries worth knowing early
 
 - `lmx` has no network listener. The host reaches it only through management SSH.
 - Facts are read in the caller's process with the caller's privileges and need no daemon.
+- The clipboard travels through the terminal with OSC 52, or through tmux inside tmux; the terminal on the Mac must allow it.
+- Text is colored only on a terminal, never with `NO_COLOR` or `TERM=dumb`.
 - Configuration comes only from NixOS (`/etc/lmx/config.json`), never from the host at runtime.
 - Release binaries are static musl executables for `aarch64` and `x86_64` Linux.
 

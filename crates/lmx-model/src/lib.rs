@@ -11,6 +11,7 @@
 //! | [`Config`]   | NixOS, into [`CONFIG_PATH`]             | `lmx`                   |
 //! | [`Envelope`] | every `lmx … --json` answer             | the LimaNix host        |
 //! | [`Status`]   | `lmx status`                            | the host and people     |
+//! | [`Version`]  | `lmx version`                           | the host and people     |
 //!
 //! JSON field names are `snake_case`. The host contract is versioned by [`CONTRACT_VERSION`] and
 //! the configuration by [`CONFIG_SCHEMA`]; each changes only with a deliberate migration.
@@ -22,9 +23,11 @@
 mod config;
 mod contract;
 mod status;
+mod version;
 
 pub use config::{
     CONFIG_PATH, CONFIG_SCHEMA, Config, ConfigError, DiskPolicy, Session, Tools, User, Vm,
 };
 pub use contract::{CONTRACT_VERSION, Envelope, ErrorBody, ErrorCode};
 pub use status::{DiskUsage, Generations, Interface, Problem, Status};
+pub use version::Version;

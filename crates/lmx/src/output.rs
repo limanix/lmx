@@ -1,12 +1,19 @@
 //! Exit codes and answers on standard output: JSON for the host, text for people.
 
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    process::ExitCode,
+};
 
 use lmx_model::Envelope;
 use serde::Serialize;
 
-/// Exit status of a failed operation; details are in the JSON answer or on standard error.
+/// Exit status of a failed operation; details are in the JSON answer, in the page, or on standard
+/// error.
 pub(crate) const FAILURE: u8 = 1;
+
+/// Exit status of a usage error.
+const USAGE: u8 = 2;
 
 /// Writes one envelope as a single JSON line to standard output.
 pub(crate) fn write_json<T: Serialize>(envelope: &Envelope<T>) -> io::Result<()> {
@@ -19,7 +26,27 @@ pub(crate) fn write_json<T: Serialize>(envelope: &Envelope<T>) -> io::Result<()>
 /// Writes text for people to standard output, returning write failures instead of panicking
 /// like `print!`.
 pub(crate) fn write_text(text: &str) -> io::Result<()> {
+    write_bytes(text.as_bytes())
+}
+
+/// Writes bytes, such as clipboard contents, to standard output.
+pub(crate) fn write_bytes(bytes: &[u8]) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
-    stdout.write_all(text.as_bytes())?;
+    stdout.write_all(bytes)?;
     stdout.flush()
+}
+
+/// Exit status of a page for people: success when the parts the page needs could be read.
+pub(crate) fn page_status(complete: bool) -> ExitCode {
+    if complete {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(FAILURE)
+    }
+}
+
+/// Reports a usage error.
+pub(crate) fn usage(usage: &str) -> ExitCode {
+    eprintln!("{usage}");
+    ExitCode::from(USAGE)
 }

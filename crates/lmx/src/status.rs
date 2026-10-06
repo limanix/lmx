@@ -8,7 +8,7 @@ use std::{io, process::ExitCode};
 use lmx_facts::{FactError, disk, generations, network, units};
 use lmx_model::{Envelope, Problem, Status};
 
-use crate::{cli::OutputArgs, format::gibibytes, output, system::System};
+use crate::{cli::OutputArgs, format, layout, output, system::System};
 
 /// Runs `lmx status`.
 pub(crate) fn run(system: &System, args: &OutputArgs) -> io::Result<ExitCode> {
@@ -73,70 +73,53 @@ const LABEL: usize = 14;
 pub(crate) fn render(status: &Status) -> String {
     let unknown = || "unknown".to_owned();
     let generations = &status.generations;
-    let mut text = String::new();
-    // Continuation lines, such as a tool's multi-line standard error, stay in the value column.
-    let mut row = |label: &str, value: String| {
-        let mut lines = value.lines();
-        let first = lines.next().unwrap_or_default();
-        text.push_str(&format!("{label:<LABEL$}{first}\n"));
-        for line in lines {
-            text.push_str(&format!("{:LABEL$}{line}\n", ""));
-        }
-    };
-
-    row(
-        "Generation",
-        format!(
-            "desired {}, built {}, booted {}",
-            generations.desired.clone().unwrap_or_else(unknown),
-            generations.built.clone().unwrap_or_else(unknown),
-            generations.booted.clone().unwrap_or_else(unknown),
-        ),
-    );
-    row(
-        "Disk",
-        status.disk.map_or_else(unknown, |disk| {
+    let mut rows = vec![
+        (
+            "Generation",
             format!(
-                "{} of {} free, {} of {} inodes free",
-                gibibytes(disk.free_bytes),
-                gibibytes(disk.bytes),
-                disk.free_inodes,
-                disk.inodes
-            )
-        }),
-    );
-    row(
-        "Network",
-        status
-            .interfaces
-            .as_ref()
-            .map_or_else(unknown, |interfaces| {
-                let addressed: Vec<String> = interfaces
-                    .iter()
-                    .filter(|interface| !interface.ipv4.is_empty())
-                    .map(|interface| format!("{} {}", interface.name, interface.ipv4.join(" ")))
-                    .collect();
-                if addressed.is_empty() {
-                    "no global IPv4 address".into()
+                "desired {}, built {}, booted {}",
+                generations.desired.clone().unwrap_or_else(unknown),
+                generations.built.clone().unwrap_or_else(unknown),
+                generations.booted.clone().unwrap_or_else(unknown),
+            ),
+        ),
+        (
+            "Disk",
+            status.disk.as_ref().map_or_else(unknown, format::disk),
+        ),
+        (
+            "Network",
+            status
+                .interfaces
+                .as_ref()
+                .map_or_else(unknown, |interfaces| {
+                    let addressed: Vec<String> = interfaces
+                        .iter()
+                        .filter(|interface| !interface.ipv4.is_empty())
+                        .map(|interface| format!("{} {}", interface.name, interface.ipv4.join(" ")))
+                        .collect();
+                    if addressed.is_empty() {
+                        "no global IPv4 address".into()
+                    } else {
+                        addressed.join(", ")
+                    }
+                }),
+        ),
+        (
+            "Failed units",
+            status.failed_units.as_ref().map_or_else(unknown, |units| {
+                if units.is_empty() {
+                    "none".into()
                 } else {
-                    addressed.join(", ")
+                    units.join(", ")
                 }
             }),
-    );
-    row(
-        "Failed units",
-        status.failed_units.as_ref().map_or_else(unknown, |units| {
-            if units.is_empty() {
-                "none".into()
-            } else {
-                units.join(", ")
-            }
-        }),
-    );
+        ),
+    ];
     for problem in &status.problems {
-        row("Problem", format!("{}: {}", problem.fact, problem.message));
+        rows.push(("Problem", format!("{}: {}", problem.fact, problem.message)));
     }
-    text
+    layout::rows(&rows, LABEL)
 }
 
 #[cfg(test)]
@@ -178,9 +161,28 @@ mod tests {
         assert_eq!(
             render(&status),
             "Generation    desired 0123456789ab, built 0123456789ab, booted unknown\n\
-             Disk          9.0 GiB of 16 GiB free, 495616 of 1048576 inodes free\n\
+             Disk          8.0 GiB of 16 GiB free, 495616 of 1048576 inodes free\n\
              Network       enp0s1 192.0.2.10\n\
              Failed units  none\n"
+        );
+    }
+
+    #[test]
+    fn leaves_out_inodes_of_a_file_system_without_an_inode_table() {
+        let status = Status {
+            disk: Some(DiskUsage {
+                bytes: 16 << 30,
+                free_bytes: 9 << 30,
+                available_bytes: 8 << 30,
+                inodes: 0,
+                free_inodes: 0,
+            }),
+            ..Status::default()
+        };
+        assert!(
+            render(&status).contains("\nDisk          8.0 GiB of 16 GiB free\n"),
+            "{}",
+            render(&status)
         );
     }
 

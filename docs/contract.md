@@ -78,6 +78,8 @@ Examples: [complete](../contract/v1/status.json), [partial](../contract/v1/statu
 
 `data` has `version`, the release version of the binary, and `contract`, the contract version it speaks.
 
+Example: [version](../contract/v1/version.json).
+
 ## Change the host contract
 
 - Adding an optional field, a new command or a new error code is compatible and keeps the version.

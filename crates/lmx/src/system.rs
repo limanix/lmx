@@ -8,7 +8,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use lmx_facts::{disk::STORE_PATH, generations::GenerationPaths};
+use lmx_facts::{
+    disk::STORE_PATH, generations::GenerationPaths, machine::MEMINFO_PATH, mounts::MOUNTINFO_PATH,
+};
 use lmx_model::{CONFIG_PATH, Config};
 
 /// Guest locations and the platform configuration, resolved once per command.
@@ -39,6 +41,16 @@ impl System {
         self.root.join(STORE_PATH.trim_start_matches('/'))
     }
 
+    /// Mount table of this process.
+    pub(crate) fn mountinfo(&self) -> PathBuf {
+        self.root.join(MOUNTINFO_PATH.trim_start_matches('/'))
+    }
+
+    /// Memory information.
+    pub(crate) fn meminfo(&self) -> PathBuf {
+        self.root.join(MEMINFO_PATH.trim_start_matches('/'))
+    }
+
     /// Locations of the generation markers.
     pub(crate) fn generation_paths(&self) -> GenerationPaths {
         GenerationPaths::under(&self.root)
@@ -62,7 +74,7 @@ impl System {
 }
 
 /// Path from a test hook, or `None` when the variable is unset or empty.
-fn hook(name: &str) -> Option<PathBuf> {
+pub(crate) fn hook(name: &str) -> Option<PathBuf> {
     env::var_os(name)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
