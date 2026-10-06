@@ -1,0 +1,28 @@
+{
+  "contract": 1,
+  "ok": true,
+  "data": {
+    "generations": {
+      "desired": "0123456789ab",
+      "built": null,
+      "booted": null
+    },
+    "disk": {
+      "bytes": 17179869184,
+      "free_bytes": 1073741824,
+      "available_bytes": 214748364,
+      "inodes": 1048576,
+      "free_inodes": 52428
+    },
+    "interfaces": null,
+    "failed_units": [
+      "limanix-store-guard.service"
+    ],
+    "problems": [
+      {
+        "fact": "interfaces",
+        "message": "cannot run /run/current-system/sw/bin/ip: No such file or directory (os error 2)"
+      }
+    ]
+  }
+}

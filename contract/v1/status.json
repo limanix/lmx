@@ -1,0 +1,40 @@
+{
+  "contract": 1,
+  "ok": true,
+  "data": {
+    "generations": {
+      "desired": "0123456789ab",
+      "built": "0123456789ab",
+      "booted": "ba9876543210"
+    },
+    "disk": {
+      "bytes": 17179869184,
+      "free_bytes": 9663676416,
+      "available_bytes": 8791261184,
+      "inodes": 1048576,
+      "free_inodes": 495616
+    },
+    "interfaces": [
+      {
+        "name": "lo",
+        "mac": "00:00:00:00:00:00",
+        "ipv4": []
+      },
+      {
+        "name": "enp0s1",
+        "mac": "52:55:55:aa:bb:cc",
+        "ipv4": [
+          "192.0.2.10"
+        ]
+      },
+      {
+        "name": "wg0",
+        "mac": null,
+        "ipv4": [
+          "10.0.0.2"
+        ]
+      }
+    ],
+    "failed_units": []
+  }
+}

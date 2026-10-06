@@ -1,0 +1,45 @@
+name: Pull request checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ matrix.command }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        command:
+          - ci/rust-fmt
+          - ci/rust-clippy
+          - ci/rust-test
+          - ci/rust-docs
+          - ci/rust-audit
+          - ci/markdown-fmt
+          - release/build
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Cache Cargo registry and build results
+        if: matrix.command != 'ci/markdown-fmt'
+        uses: actions/cache@v5
+        with:
+          path: .cache/rust
+          key: rust-${{ runner.os }}-${{ runner.arch }}-${{ matrix.command }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'rust-toolchain.toml') }}
+          restore-keys: |
+            rust-${{ runner.os }}-${{ runner.arch }}-${{ matrix.command }}-
+      - name: Run ${{ matrix.command }}
+        uses: mr-chelyshkin/actions/invoke-taskfile@v1
+        with:
+          command: ${{ matrix.command }}

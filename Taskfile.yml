@@ -1,0 +1,100 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: '3.53.1'
+
+includes:
+  rust:
+    taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/v0.0.5/taskfiles/rust/Taskfile.yml
+    internal: true
+  markdown:
+    taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/v0.0.5/taskfiles/markdown/Taskfile.yml
+    internal: true
+
+vars:
+  markdown_paths: README.md ARCHITECTURE.md docs/contract.md
+  version:
+    sh: sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)"/\1/p' Cargo.toml | head -n 1
+
+tasks:
+  ci:
+    desc: List CI tasks.
+    cmds:
+      - task -l | grep "ci/"
+
+  ci/rust-fmt:
+    desc: Check Rust formatting.
+    cmds:
+      - task: rust:fmt
+        vars: { FMT_ARGS: '--all --check' }
+
+  ci/rust-clippy:
+    desc: Lint every target with Clippy and deny warnings.
+    cmds:
+      - task: rust:clippy
+        vars: { CLIPPY_ARGS: '--workspace --all-targets --locked -- -D warnings' }
+
+  ci/rust-test:
+    desc: Run unit and integration tests.
+    cmds:
+      - task: rust:test
+        vars: { TEST_ARGS: '--workspace --locked' }
+
+  ci/rust-docs:
+    desc: Build API documentation, including private items, and deny rustdoc warnings.
+    cmds:
+      - task: rust:doc/build
+        vars: { DOC_ARGS: '--workspace --no-deps --document-private-items --locked' }
+
+  ci/rust-audit:
+    desc: Scan dependencies for published advisories.
+    cmds:
+      - task: rust:audit
+
+  ci/markdown-fmt:
+    desc: Check Markdown formatting without modifying files.
+    cmds:
+      - task: markdown:fmt
+        vars:
+          FMT_PATHS: '{{.markdown_paths}}'
+          TASK_CONTEXT:
+            ref: 'merge (dict) (dict "CONTAINER_MOUNT_MODE" "ro") (.TASK_CONTEXT | default .)'
+
+  rust/fix:
+    desc: Format Rust sources.
+    cmds:
+      - task: rust:fmt/fix
+        vars: { FMT_ARGS: '--all' }
+
+  markdown/fix:
+    desc: Format Markdown with the settings used in CI.
+    cmds:
+      - task: markdown:fmt/fix
+        vars:
+          FMT_PATHS: '{{.markdown_paths}}'
+
+  release/build:
+    desc: Build static release archives and checksums into dist/.
+    cmds:
+      - task: rust:_cargo/tool
+        vars:
+          RUSTFLAGS: -D warnings
+          CMD: >-
+            sh -eu -c '
+              version="$1"
+              rm -rf dist
+              mkdir -p dist
+              for system in aarch64-linux x86_64-linux; do
+                case "$system" in
+                  aarch64-linux) target=aarch64-unknown-linux-musl ;;
+                  x86_64-linux) target=x86_64-unknown-linux-musl ;;
+                esac
+                cargo build --release --locked --target "$target" -p lmx
+                name="lmx-$version-$system"
+                mkdir -p "dist/$name"
+                install -m 0755 "$CARGO_TARGET_DIR/$target/release/lmx" "dist/$name/lmx"
+                install -m 0644 LICENSE "dist/$name/LICENSE"
+                tar --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 -C dist -cf "dist/$name.tar" "$name"
+                gzip -9n "dist/$name.tar"
+                (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
+                rm -rf "dist/$name"
+              done
+            ' release {{.version}}

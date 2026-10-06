@@ -1,0 +1,36 @@
+[workspace]
+resolver = "3"
+members  = ["crates/lmx", "crates/lmx-facts", "crates/lmx-model"]
+
+[workspace.package]
+version      = "0.1.0"
+edition      = "2024"
+rust-version = "1.90.0"
+license      = "Apache-2.0"
+repository   = "https://github.com/limanix/lmx"
+homepage     = "https://limanix.dev"
+
+[workspace.dependencies]
+lmx-facts  = { path = "crates/lmx-facts" }
+lmx-model  = { path = "crates/lmx-model" }
+clap       = { version = "4.6.6", features = ["derive"] }
+rustix     = { version = "1.1.4", features = ["fs"] }
+serde      = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+tempfile   = "3.27.0"
+thiserror  = "2.0.20"
+
+[workspace.lints.rust]
+missing_debug_implementations = "warn"
+missing_docs                  = "warn"
+unreachable_pub               = "warn"
+unsafe_code                   = "forbid"
+
+[workspace.lints.clippy]
+missing_docs_in_private_items = "warn"
+
+# Panics unwind: lmxd relies on Taskvisor catching task panics, and Cargo cannot set `panic` per package.
+[profile.release]
+codegen-units = 1
+lto           = true
+strip         = true
