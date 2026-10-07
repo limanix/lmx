@@ -1,0 +1,170 @@
+syntax = "proto3";
+
+// Calls from `lmx` to the guest owner daemon `lmxd`, served on `/run/lmx/lmx.sock`.
+package lmx.v1;
+
+// The guest owner daemon.
+service Owner {
+  // What `lmxd` is doing and which conditions hold. Open to every caller.
+  rpc Status(StatusRequest) returns (StatusResponse);
+  // Collects unreferenced store paths when free space is low. Root only.
+  rpc Reserve(ReserveRequest) returns (ReserveResponse);
+  // Builds the mounted generation for the next boot and streams its progress. Root only.
+  rpc Apply(ApplyRequest) returns (stream ApplyEvent);
+  // Cancels the apply of a generation. Root only.
+  rpc CancelApply(CancelApplyRequest) returns (CancelApplyResponse);
+}
+
+// Usage of one file system, as in the host contract.
+message DiskUsage {
+  // Total size in bytes.
+  uint64 bytes = 1;
+  // Free bytes, including blocks reserved for root.
+  uint64 free_bytes = 2;
+  // Free bytes available to unprivileged users.
+  uint64 available_bytes = 3;
+  // Total inodes; zero when the file system has no fixed inode table.
+  uint64 inodes = 4;
+  // Free inodes.
+  uint64 free_inodes = 5;
+}
+
+// A failure the host contract names.
+message Failure {
+  // Host contract error code, such as `disk.low`.
+  string code = 1;
+  // Explanation for people.
+  string message = 2;
+  // Code-specific details as a JSON object; empty without details.
+  string details = 3;
+}
+
+// Input of `Status`.
+message StatusRequest {}
+
+// A condition of the guest that needs attention.
+message Condition {
+  // Stable name, such as `DiskLow`.
+  string type = 1;
+  // Explanation for people.
+  string message = 2;
+}
+
+// One operation of `lmxd`.
+message Operation {
+  // Name of the task that runs the operation, such as `store-collect-1`.
+  string task = 1;
+  // Kind of the operation, such as `StoreCollect`.
+  string kind = 2;
+  // Lifecycle phase, such as `running`.
+  string phase = 3;
+  // When the operation was requested, in Unix milliseconds.
+  uint64 created_at = 4;
+}
+
+// Output of `Status`.
+message StatusResponse {
+  // Release version of `lmxd`.
+  string version = 1;
+  // Conditions derived from facts when `lmxd` was asked.
+  repeated Condition conditions = 2;
+  // Operations `lmxd` has accepted and not finished.
+  repeated Operation operations = 3;
+}
+
+// Input of `Reserve`.
+message ReserveRequest {}
+
+// Store disk usage before and after a reserve.
+message ReserveResult {
+  // Usage before the reserve.
+  DiskUsage before = 1;
+  // Usage after the reserve.
+  DiskUsage after = 2;
+  // Free bytes gained; zero when usage grew.
+  uint64 freed_bytes = 3;
+  // Whether unreferenced store paths were collected.
+  bool collected = 4;
+}
+
+// Output of `Reserve`.
+message ReserveResponse {
+  // A result, or a failure such as `disk.low`.
+  oneof outcome {
+    // The reserve succeeded.
+    ReserveResult result = 1;
+    // The reserve failed.
+    Failure failure = 2;
+  }
+}
+
+// Input of `Apply`.
+message ApplyRequest {
+  // Generation to apply; it must be the one mounted at `/mnt/limanix`.
+  string generation = 1;
+  // Whether to stream the progress; without it the answer comes once the apply runs.
+  bool follow = 2;
+}
+
+// One event of `Apply`; the last one is the outcome.
+message ApplyEvent {
+  // What happened.
+  oneof event {
+    // A phase started: `environment`, `reserve` or `build`.
+    string phase = 1;
+    // A line the build printed.
+    OutputLine output = 2;
+    // A problem that does not stop the apply, such as `disk.low`.
+    Failure warning = 3;
+    // Number of events the follower missed.
+    uint64 lagged = 4;
+    // How the apply ended, or that it runs when it is not followed.
+    ApplyOutcome outcome = 5;
+  }
+}
+
+// A line the build printed.
+message OutputLine {
+  // Whether the line came from standard error.
+  bool stderr = 1;
+  // The line, without its newline.
+  bytes line = 2;
+  // Whether the end of a long line was cut.
+  bool truncated = 3;
+}
+
+// How an apply ended.
+message ApplyOutcome {
+  // A result, or a failure such as `apply.build_failed`.
+  oneof outcome {
+    // The generation and its state.
+    ApplyResult result = 1;
+    // The apply failed.
+    Failure failure = 2;
+  }
+}
+
+// The generation of an apply and its state.
+message ApplyResult {
+  // The generation applied.
+  string generation = 1;
+  // `running` or `restart_required`.
+  string state = 2;
+}
+
+// Input of `CancelApply`.
+message CancelApplyRequest {
+  // Generation whose apply to cancel.
+  string generation = 1;
+}
+
+// Output of `CancelApply`.
+message CancelApplyResponse {
+  // Whether an apply was cancelled, or a failure such as `permission.denied`.
+  oneof outcome {
+    // Whether an apply of the generation was running and is now cancelled.
+    bool cancelled = 1;
+    // The cancel failed.
+    Failure failure = 2;
+  }
+}

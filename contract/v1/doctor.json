@@ -1,0 +1,24 @@
+{
+  "contract": 1,
+  "ok": true,
+  "data": {
+    "checks": [
+      {
+        "check": "config",
+        "status": "ok",
+        "message": "/etc/lmx/config.json is valid; generation 0123456789ab."
+      },
+      {
+        "check": "owner",
+        "status": "ok",
+        "message": "lmxd 0.1.0 answers."
+      },
+      {
+        "check": "generations",
+        "status": "warning",
+        "message": "Generation 0123456789ab is built; restart the VM to boot it.",
+        "hint": "Restart the VM from the Mac; limanix update does it."
+      }
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "contract": 1,
+  "ok": false,
+  "error": {
+    "code": "disk.low",
+    "message": "Less than 10% of the guest disk is still free after collecting unreferenced store paths.",
+    "details": {
+      "before": {
+        "bytes": 17179869184,
+        "free_bytes": 1073741824,
+        "available_bytes": 214748364,
+        "inodes": 1048576,
+        "free_inodes": 52428
+      },
+      "after": {
+        "bytes": 17179869184,
+        "free_bytes": 1342177280,
+        "available_bytes": 483183820,
+        "inodes": 1048576,
+        "free_inodes": 98304
+      },
+      "freed_bytes": 268435456
+    }
+  }
+}

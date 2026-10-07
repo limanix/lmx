@@ -1,0 +1,22 @@
+{
+  "contract": 1,
+  "ok": true,
+  "data": {
+    "before": {
+      "bytes": 17179869184,
+      "free_bytes": 2147483648,
+      "available_bytes": 1288490188,
+      "inodes": 1048576,
+      "free_inodes": 104857
+    },
+    "after": {
+      "bytes": 17179869184,
+      "free_bytes": 6442450944,
+      "available_bytes": 5583457484,
+      "inodes": 1048576,
+      "free_inodes": 524288
+    },
+    "freed_bytes": 4294967296,
+    "collected": true
+  }
+}
