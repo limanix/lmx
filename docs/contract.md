@@ -36,24 +36,28 @@ A command that writes no answer, for example after a usage error or a lost conne
 | `1`    | The operation failed; see the JSON answer, or standard error when no answer was written |
 | `2`    | Usage error                                                                             |
 | `3`    | The guest owner daemon is unavailable                                                   |
-| `130`  | Cancelled                                                                               |
+| `130`  | The apply was cancelled (`apply.cancelled`)                                             |
 
 ## Error codes
 
-| Code                   | Meaning                                                            |
-| ---------------------- | ------------------------------------------------------------------ |
-| `owner.unavailable`    | `lmxd` is not reachable                                            |
-| `apply.build_failed`   | `nixos-rebuild` failed for the requested generation                |
-| `apply.cancelled`      | The operation was cancelled by an explicit request                 |
-| `disk.low`             | Free bytes or inodes are below the platform minimum                |
-| `disk.unreadable`      | The usage of the store file system cannot be read                  |
-| `network.unreachable`  | A required destination, such as the binary cache, is unreachable   |
-| `permission.denied`    | The caller is not allowed to run the operation                     |
-| `generation.mismatch`  | The mounted inputs belong to a different generation than requested |
-| `contract.unsupported` | The caller requested a contract version this binary does not speak |
+| Code                       | Meaning                                                            |
+| -------------------------- | ------------------------------------------------------------------ |
+| `owner.unavailable`        | `lmxd` is not reachable                                            |
+| `apply.build_failed`       | `nixos-rebuild` failed for the requested generation                |
+| `apply.cancelled`          | The operation was cancelled by an explicit request                 |
+| `apply.environment_failed` | The environment files of the generation could not be installed     |
+| `disk.low`                 | Free bytes or inodes are below the platform minimum                |
+| `disk.unreadable`          | The usage of the store file system cannot be read                  |
+| `network.unreachable`      | A required destination, such as the binary cache, is unreachable   |
+| `permission.denied`        | The caller is not allowed to run the operation                     |
+| `generation.mismatch`      | The mounted inputs belong to a different generation than requested |
+| `contract.unsupported`     | The caller requested a contract version this binary does not speak |
+| `system.degraded`          | The booted generation failed its health check                      |
+| `wait.timeout`             | A wait ended before its condition held                             |
 
-`lmx status` and `lmx version` do not use these codes or the exit statuses `3` and `130`.
-`lmx store reserve` uses exit status `3` when `lmxd` is unavailable.
+`lmx status` without `--wait` and `lmx version` do not use these codes or the exit statuses `3` and `130`.
+Owner operations, `lmx store reserve`, `lmx apply`, `lmx apply cancel` and `lmx status --wait`, use exit status `3` when `lmxd` is unavailable.
+Only `lmx apply` uses exit status `130`.
 
 ## `lmx status`
 
@@ -70,7 +74,18 @@ A command that writes no answer, for example after a usage error or a lost conne
 
 A problem's `fact` names the field that is `null` or incomplete, or is `config` when `/etc/lmx/config.json` cannot be read.
 `owner` is `null` with an `owner` problem when `lmxd` does not answer within two seconds; the other facts are still answered.
-Its conditions are computed when it is asked: `DiskLow` means less than the platform minimum of the store disk is free.
+Its conditions are computed when it is asked:
+
+| Condition         | When                                                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| `OutOfDate`       | The mounted generation is not built: an apply is needed                                                    |
+| `RestartRequired` | The mounted generation is built but not booted: a restart is needed                                        |
+| `Degraded`        | The mounted generation is booted and failed its last health check; the message gives the reason            |
+| `Converged`       | The mounted generation is booted, healthy and finalized: older generations and their boot entries are gone |
+| `DiskLow`         | Less than the platform minimum of the store disk is free                                                   |
+
+Without a mounted generation there is no generation condition.
+A booted generation that is healthy and still keeps older generations has none either: `lmxd` is about to remove them, and a `SystemFinalize` operation shows it.
 An operation's `created_at` is when it was requested, in Unix milliseconds.
 Without the configuration, `ip` and `systemctl` are looked up in `PATH`, so a `config` problem marks a degraded answer.
 
@@ -99,6 +114,70 @@ The host treats `disk.low` as a warning: the update may still succeed.
 
 Examples: [enough room](../contract/v1/store-reserve.json), [disk low](../contract/v1/store-reserve-disk-low.json).
 
+## `lmx status --wait converged -g GENERATION`
+
+The host runs it after it restarts the VM into a new generation.
+`lmx` asks `lmxd` every two seconds until it reports `Converged` and the booted generation is `GENERATION`, then answers as `lmx status` does.
+A daemon that does not answer yet, as right after the restart, is waited for.
+`--timeout` limits the wait, such as `90s`, `10m` or `1h`; the default is 10 minutes.
+
+| Error code          | When                                                                       |
+| ------------------- | -------------------------------------------------------------------------- |
+| `system.degraded`   | At the timeout, the generation is `Degraded`; the message gives the reason |
+| `wait.timeout`      | At the timeout, the generation is not converged for another reason         |
+| `owner.unavailable` | `lmxd` never answered; exit status `3`                                     |
+
+`details` of `system.degraded` and `wait.timeout` has `conditions`, the conditions `lmxd` reported last.
+
+## `lmx apply -g GENERATION`
+
+Root only. The host runs it after it mounts a generation at `/mnt/limanix`.
+`lmxd` installs the generation's environment files into `/etc/limanix`, makes room in the store as `lmx store reserve` does, and builds the generation for the next boot with `nixos-rebuild boot`.
+The apply belongs to `lmxd`: interrupting the command does not stop it, and running the command again attaches to the running apply.
+An apply of another generation is cancelled and replaced.
+
+Without `--follow`, the answer comes at once.
+`data` has `generation` and `state`: `running`, or `restart_required` when the generation is built.
+
+With `--follow`, the command waits for the outcome.
+`--json` then writes JSON Lines: one line per event, and the envelope last.
+
+| `event`   | Fields                                                                                                   |
+| --------- | -------------------------------------------------------------------------------------------------------- |
+| `phase`   | `phase`: `environment`, `reserve` or `build`                                                             |
+| `output`  | `stream` (`stdout` or `stderr`) and `line`, a line of the build; `truncated: true` when the line was cut |
+| `warning` | `code` and `message` of a problem that does not stop the apply, such as `disk.low` from the reserve      |
+| `lagged`  | `skipped`: the follower fell behind and missed that many events                                          |
+
+A follower that attaches to a running apply receives the events from then on, and always the outcome.
+On success the envelope's `state` is `restart_required`: restart the VM to boot the generation.
+
+| Error code                 | When                                                                                                                         |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `generation.mismatch`      | `GENERATION` is not the mounted generation; `details` has `requested` and `mounted` (`null` without a mount)                 |
+| `apply.environment_failed` | The environment files cannot be installed                                                                                    |
+| `apply.build_failed`       | `nixos-rebuild` failed; `details` has `exit_code` when it exited, and `disk` with the store disk usage when the disk is full |
+| `apply.cancelled`          | `lmx apply cancel`, an apply of another generation, or a cancel through the Task API stopped the apply; exit status `130`    |
+| `permission.denied`        | The caller is not root                                                                                                       |
+| `owner.unavailable`        | `lmxd` cannot be reached, or it stopped before the apply ended; exit status `3`                                              |
+
+Without `--json`, the command prints the build's lines on their own streams and a closing sentence.
+
+Examples: [built](../contract/v1/apply-restart-required.json), [build failed](../contract/v1/apply-build-failed.json), [followed](../contract/v1/apply-follow.jsonl).
+
+## `lmx apply cancel -g GENERATION`
+
+Root only. The host runs it when the person stops an update.
+`lmxd` cancels the apply of `GENERATION` and answers once it has stopped; its followers receive `apply.cancelled`.
+A build is killed; a boot loader update that `nixos-rebuild` started finishes in its own unit.
+
+`data` has `cancelled`: `true` when an apply of the generation was running, `false` when none was.
+
+| Error code          | When                                      |
+| ------------------- | ----------------------------------------- |
+| `permission.denied` | The caller is not root                    |
+| `owner.unavailable` | `lmxd` cannot be reached; exit status `3` |
+
 ## `lmx version`
 
 `data` has `version`, the release version of the binary, and `contract`, the contract version it speaks.
@@ -109,6 +188,8 @@ Example: [version](../contract/v1/version.json).
 
 - Adding an optional field, a new command or a new error code is compatible and keeps the version.
   Hosts treat an unknown code as a generic failure.
+- A new `event` of `lmx apply --follow` is compatible too: hosts skip events they do not know.
+  A new phase or state needs a new contract version.
 - Renaming, removing or changing the meaning of a field needs a new contract version.
 - Every version keeps its examples in `contract/v<version>/`; tests decode and re-encode them without loss.
 - The LimaNix client pins an `lmx` release and tests its decoders against that release's examples.

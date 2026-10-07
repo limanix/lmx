@@ -1,0 +1,11 @@
+{
+  "contract": 1,
+  "ok": false,
+  "error": {
+    "code": "apply.build_failed",
+    "message": "nixos-rebuild failed with exit status 1.",
+    "details": {
+      "exit_code": 1
+    }
+  }
+}

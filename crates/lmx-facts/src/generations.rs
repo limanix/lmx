@@ -14,6 +14,7 @@
 //! their answer is partial and must be marked as such.
 
 use std::{
+    ffi::OsStr,
     fs, io,
     path::{Path, PathBuf},
 };
@@ -98,9 +99,54 @@ fn marker(what: &'static str, path: &Path) -> Result<Option<String>, FactError> 
     Ok(valid.then_some(generation))
 }
 
+/// Directory holding the system profile and its generation links.
+pub const PROFILES_PATH: &str = "/nix/var/nix/profiles";
+
+/// Counts the generations of the system profile: the `system-<number>-link` entries of `profiles`.
+///
+/// More than one means older generations are kept, so the current one is not finalized yet.
+pub fn system_generations(profiles: &Path) -> Result<usize, FactError> {
+    let unreadable = |source| FactError::Io {
+        what: "the system profile generations",
+        source,
+    };
+    let mut count = 0;
+    for entry in fs::read_dir(profiles).map_err(unreadable)? {
+        if is_generation(&entry.map_err(unreadable)?.file_name()) {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+/// Whether `name` is a `system-<number>-link`.
+fn is_generation(name: &OsStr) -> bool {
+    name.to_str()
+        .and_then(|name| name.strip_prefix("system-")?.strip_suffix("-link"))
+        .is_some_and(|number| {
+            !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn counts_only_the_generation_links_of_the_system_profile() {
+        let profiles = tempfile::tempdir().expect("temporary directory");
+        for name in [
+            "system-1-link",
+            "system-12-link",
+            "system-foo-link",
+            "system",
+            "default-3-link",
+        ] {
+            fs::write(profiles.path().join(name), "").expect("write an entry");
+        }
+        fs::create_dir(profiles.path().join("per-user")).expect("create a directory");
+        assert_eq!(system_generations(profiles.path()).expect("readable"), 2);
+    }
 
     fn write(path: &Path, content: &str) {
         fs::create_dir_all(path.parent().expect("marker has a parent")).expect("create parent");

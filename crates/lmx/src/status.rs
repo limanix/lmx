@@ -9,12 +9,21 @@ use std::{io, process::ExitCode};
 use lmx_facts::{FactError, disk, generations, network, units};
 use lmx_model::{Envelope, Problem, Status};
 
-use crate::{cli::OutputArgs, format, layout, output, owner, system::System};
+use crate::{
+    cli::{Goal, StatusArgs},
+    format, layout, output, owner,
+    system::System,
+    wait,
+};
 
-/// Runs `lmx status`.
-pub(crate) fn run(system: &System, args: &OutputArgs) -> io::Result<ExitCode> {
+/// Runs `lmx status`, or waits for a goal first with `--wait`.
+pub(crate) fn run(system: &System, args: &StatusArgs) -> io::Result<ExitCode> {
+    if let (Some(Goal::Converged), Some(generation)) = (args.wait, &args.generation) {
+        let timeout = args.timeout.unwrap_or(wait::TIMEOUT);
+        return wait::converged(system, generation, timeout, args.output.json);
+    }
     let status = collect(system);
-    if args.json {
+    if args.output.json {
         output::write_json(&Envelope::success(status))?;
     } else {
         output::write_text(&render(&status))?;

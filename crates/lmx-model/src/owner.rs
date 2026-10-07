@@ -26,6 +26,19 @@ pub struct Condition {
 /// Name of the condition set while less than the platform minimum of the store disk is free.
 pub const DISK_LOW: &str = "DiskLow";
 
+/// Name of the condition set while the mounted generation is not built: an apply is needed.
+pub const OUT_OF_DATE: &str = "OutOfDate";
+
+/// Name of the condition set while the built generation is not booted: a restart is needed.
+pub const RESTART_REQUIRED: &str = "RestartRequired";
+
+/// Name of the condition set when the mounted generation is built, booted, healthy and finalized: the
+/// only generation of the system profile, with the boot entries rewritten.
+pub const CONVERGED: &str = "Converged";
+
+/// Name of the condition set while the booted generation fails its health check.
+pub const DEGRADED: &str = "Degraded";
+
 /// One operation of `lmxd`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Operation {

@@ -36,6 +36,8 @@ pub struct Config {
     pub modules: Vec<String>,
     /// Free-space thresholds of the guest disk.
     pub disk: DiskPolicy,
+    /// Health check of an applied generation.
+    pub health: Health,
     /// Named-session provider selected by catalog modules.
     pub session: Session,
     /// Absolute paths of the system tools the binaries run.
@@ -64,6 +66,8 @@ pub struct User {
     pub home: String,
     /// Numeric user ID; equals the user's ID on the Mac.
     pub uid: u32,
+    /// Numeric ID of the user's primary group, which owns the environment files.
+    pub gid: u32,
 }
 
 /// Free-space thresholds of the guest disk, in percent of bytes or inodes.
@@ -105,6 +109,25 @@ pub struct Tools {
     pub ionice: String,
     /// `grep`, used to leave the expected roots out of the garbage-collector roots report.
     pub grep: String,
+    /// `nixos-rebuild`, used to build a mounted generation for the next boot.
+    pub nixos_rebuild: String,
+    /// `nix-env`, used to remove older generations of the system profile.
+    pub nix_env: String,
+    /// `sudo`, used by the health check to run a command as the development account.
+    pub sudo: String,
+    /// `bash`, the login shell of that command.
+    pub bash: String,
+    /// `systemd-run`, used to run `switch-to-configuration` in its own unit, so stopping `lmxd`
+    /// never interrupts a boot loader update.
+    pub systemd_run: String,
+}
+
+/// Health check of an applied generation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Health {
+    /// Platform units that must be active, such as `sshd.service`.
+    pub units: Vec<String>,
 }
 
 /// Failure to obtain a usable configuration.
@@ -170,9 +193,10 @@ mod tests {
         "schema": 1,
         "vm": {"name": "dev-box", "arch": "arm64", "system": "NixOS 26.05"},
         "generation": "0123456789ab",
-        "user": {"name": "dev", "home": "/home/dev", "uid": 501},
+        "user": {"name": "dev", "home": "/home/dev", "uid": 501, "gid": 100},
         "modules": ["lmx:console", "lmx:go"],
         "disk": {"collect_percent": 20, "minimum_percent": 10},
+        "health": {"units": ["sshd.service", "lmx.socket"]},
         "session": {"command": null, "providers": ["lmx:tmux"]},
         "tools": {
             "ip": "/run/current-system/sw/bin/ip",
@@ -180,7 +204,12 @@ mod tests {
             "nix_store": "/run/current-system/sw/bin/nix-store",
             "nice": "/run/current-system/sw/bin/nice",
             "ionice": "/run/current-system/sw/bin/ionice",
-            "grep": "/run/current-system/sw/bin/grep"
+            "grep": "/run/current-system/sw/bin/grep",
+            "nixos_rebuild": "/run/current-system/sw/bin/nixos-rebuild",
+            "nix_env": "/run/current-system/sw/bin/nix-env",
+            "sudo": "/run/wrappers/bin/sudo",
+            "bash": "/run/current-system/sw/bin/bash",
+            "systemd_run": "/run/current-system/sw/bin/systemd-run"
         }
     }"#;
 

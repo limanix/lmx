@@ -6,7 +6,7 @@
 
 `lmx` runs inside every [LimaNix](https://limanix.dev) guest.
 It reports what the guest really is and answers the LimaNix host with versioned JSON over management SSH.
-Its daemon, `lmxd`, owns the work that must not depend on a caller's session, starting with room in the Nix store.
+Its daemon, `lmxd`, owns the work that must not depend on a caller's session: room in the Nix store, and updates of the system from build to finalize.
 
 [The problem](#the-problem) · [Commands](#commands) · [Host contract](docs/contract.md) · [Contributor map](ARCHITECTURE.md) · [Design](docs/plans/2026-10-06-guest-owner-design.md)
 
@@ -25,19 +25,22 @@ person ───────► lmx <command>              ──► text for pe
 
 ## Commands
 
-| Command               | Answers or does                                                                                                |
-| --------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `lmx help`            | The workspace and the commands inside the VM and on the Mac; also `lmx`, `lmx -h`                              |
-| `lmx info`            | The kernel, guest disk, shared folders and failed units                                                        |
-| `lmx welcome`         | The summary an interactive shell prints when it starts                                                         |
-| `lmx status`          | Desired, built and booted generations; store disk usage; interfaces; failed systemd units; the state of `lmxd` |
-| `lmx version`         | The binary version and the host contract version                                                               |
-| `lmx store reserve`   | Collects unreferenced store paths when space is low; run in `lmxd`, root only                                  |
-| `lmx clipboard copy`  | Copies standard input to the Mac clipboard                                                                     |
-| `lmx clipboard paste` | Prints the Mac clipboard, if the terminal allows reads                                                         |
-| `lmx session NAME`    | Opens a named session with the provider that the selected modules configure                                    |
+| Command                 | Answers or does                                                                                                |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `lmx help`              | The workspace and the commands inside the VM and on the Mac; also `lmx`, `lmx -h`                              |
+| `lmx info`              | The kernel, guest disk, shared folders and failed units                                                        |
+| `lmx welcome`           | The summary an interactive shell prints when it starts                                                         |
+| `lmx status`            | Desired, built and booted generations; store disk usage; interfaces; failed systemd units; the state of `lmxd` |
+| `lmx version`           | The binary version and the host contract version                                                               |
+| `lmx store reserve`     | Collects unreferenced store paths when space is low; run in `lmxd`, root only                                  |
+| `lmx apply -g G`        | Builds the mounted generation G for the next boot; run in `lmxd`, root only; `--follow` streams the build      |
+| `lmx apply cancel -g G` | Stops the apply of generation G; root only                                                                     |
+| `lmx clipboard copy`    | Copies standard input to the Mac clipboard                                                                     |
+| `lmx clipboard paste`   | Prints the Mac clipboard, if the terminal allows reads                                                         |
+| `lmx session NAME`      | Opens a named session with the provider that the selected modules configure                                    |
 
-Add `--json` to `status`, `version` and `store reserve` to answer with the [host contract](docs/contract.md).
+Add `--json` to `status`, `version`, `store reserve`, `apply` and `apply cancel` to answer with the [host contract](docs/contract.md).
+`lmx status --wait converged -g G` answers once `lmxd` reports generation G booted, healthy and finalized.
 `lmx status` reads every fact independently: an unreadable fact is reported as a problem, and the others are still answered.
 
 Started under the name `pbcopy`, `pbpaste` or `limanix-session`, the binary keeps the arguments, messages and exit statuses of the shell command it replaces.
@@ -45,11 +48,16 @@ Started under the name `pbcopy`, `pbpaste` or `limanix-session`, the binary keep
 ## The daemon
 
 `lmxd` runs as root from systemd, started at boot and through `lmx.socket`, with readiness and a watchdog.
-It replaces the platform's store guard, its timer, the daily `nix-gc` timer and the host's reserve over SSH:
+It replaces the platform's store guard, its timer, the daily `nix-gc` timer, and the host's reserve, rebuild and prune over SSH:
 
 - 5 minutes after boot and then every 15 minutes, it collects unreferenced store paths at idle priority when less than 20% of the store disk is free, and lists the garbage-collector roots in its log when less than 10% stays free;
 - `lmx store reserve` does the same at once for the host and answers with the usage before and after;
+- `lmx apply` installs the environment files of the generation the host mounted, makes room in the store and runs `nixos-rebuild boot`; a caller that disconnects leaves the apply running, and asking again attaches to it;
+- after the restart into a new generation, it checks the platform units, the shared folders and a login shell of the development account, then removes the older generations and rewrites the boot entries;
 - every operation is a Solti task, so its output reaches the journal (`journalctl -u lmx`).
+
+For an update, the host stops the system daemon and starts one from the mounted generation with `lmxd --transient`, which applies but neither guards the store nor finalizes.
+A daemon never takes over a socket that another daemon still serves.
 
 Reference units are in [`packaging/systemd/`](packaging/systemd).
 

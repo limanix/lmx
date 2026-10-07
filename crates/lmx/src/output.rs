@@ -5,7 +5,7 @@ use std::{
     process::ExitCode,
 };
 
-use lmx_model::Envelope;
+use lmx_model::{Envelope, ErrorBody};
 use serde::Serialize;
 
 /// Exit status of a failed operation; details are in the JSON answer, in the page, or on standard
@@ -20,10 +20,26 @@ pub(crate) const UNAVAILABLE: u8 = 3;
 
 /// Writes one envelope as a single JSON line to standard output.
 pub(crate) fn write_json<T: Serialize>(envelope: &Envelope<T>) -> io::Result<()> {
+    write_json_line(envelope)
+}
+
+/// Writes `value` as a single JSON line to standard output, such as one event of a stream.
+pub(crate) fn write_json_line<T: Serialize>(value: &T) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
-    serde_json::to_writer(&mut stdout, envelope)?;
+    serde_json::to_writer(&mut stdout, value)?;
     stdout.write_all(b"\n")?;
     stdout.flush()
+}
+
+/// Reports a failed command and exits with `status`: the JSON answer with `error`, or its message
+/// on standard error.
+pub(crate) fn failure(json: bool, error: ErrorBody, status: u8) -> io::Result<ExitCode> {
+    if json {
+        write_json(&Envelope::<()>::failure(error))?;
+    } else {
+        eprintln!("lmx: {}", error.message);
+    }
+    Ok(ExitCode::from(status))
 }
 
 /// Writes text for people to standard output, returning write failures instead of panicking

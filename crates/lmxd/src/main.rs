@@ -1,15 +1,22 @@
 //! `lmxd`: the guest owner daemon of a LimaNix VM.
 //!
 //! systemd starts it as root through `lmx.socket`, which passes the listening socket, so the socket
-//! exists while the daemon restarts. Started without one, as the transient daemon of an update,
-//! it binds the socket itself. It reports readiness and feeds the watchdog when systemd asks for
-//! them, and stops in order on SIGTERM or SIGINT.
+//! exists while the daemon restarts. Started without one, it binds the socket itself. It reports
+//! readiness and feeds the watchdog when systemd asks for them, and stops in order on SIGTERM or
+//! SIGINT.
+//!
+//! The host starts a second, transient daemon from the mounted generation to update the system:
+//! `lmxd --transient --config <package>/etc/lmx/config.json`. It applies, but runs neither the store
+//! guard nor the generation observer, which belong to the daemon of the booted system.
 #![forbid(unsafe_code)]
 
 use std::{
     fs::{self, Permissions},
     io,
-    os::unix::fs::{FileTypeExt, PermissionsExt},
+    os::unix::{
+        fs::{FileTypeExt, PermissionsExt},
+        net::UnixStream,
+    },
     path::{Path, PathBuf},
     process::ExitCode,
     sync::Arc,
@@ -20,7 +27,7 @@ use clap::Parser;
 use lmx_facts::disk::{self, STORE_PATH};
 use lmx_ipc::SOCKET_PATH;
 use lmx_model::{CONFIG_PATH, Config};
-use lmxd::{Daemon, GuardSchedule, Options};
+use lmxd::{Daemon, GuardSchedule, ObserverSchedule, Options};
 use sd_notify::NotifyState;
 use solti::observe::{LoggerConfig, LoggerFormat, init_logger};
 use tokio::{
@@ -39,6 +46,13 @@ struct Args {
     /// Socket to bind when systemd passes none.
     #[arg(long, default_value = SOCKET_PATH)]
     socket: PathBuf,
+    /// Run as the transient daemon of an update: without the store guard and the generation
+    /// observer.
+    #[arg(long)]
+    transient: bool,
+    /// System root of the guest paths besides the store and the socket; only tests change it.
+    #[arg(long, default_value = "/", hide = true)]
+    root: PathBuf,
 }
 
 fn main() -> ExitCode {
@@ -68,7 +82,9 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let daemon = Daemon::start(Options {
         config,
         usage: Arc::new(|| disk::usage(Path::new(STORE_PATH)).map_err(|error| error.to_string())),
-        guard: Some(GuardSchedule::after_boot(uptime())),
+        guard: (!args.transient).then(|| GuardSchedule::after_boot(uptime())),
+        observer: (!args.transient).then(ObserverSchedule::system),
+        root: args.root,
     })
     .await?;
     let _ = sd_notify::notify(false, &[NotifyState::Ready]);
@@ -103,9 +119,19 @@ fn listener(path: &Path) -> io::Result<UnixListener> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    // A socket left by an earlier daemon is replaced; anything else at the path is not ours.
+    // A socket left by an earlier daemon is replaced. One that a daemon still serves, such as the
+    // system daemon when the host starts a transient one, is refused: two daemons would apply at once.
+    // Anything else at the path is not ours.
     match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_socket() => fs::remove_file(path)?,
+        Ok(metadata) if metadata.file_type().is_socket() => {
+            if UnixStream::connect(path).is_ok() {
+                return Err(io::Error::new(
+                    io::ErrorKind::AddrInUse,
+                    format!("another lmxd serves {}", path.display()),
+                ));
+            }
+            fs::remove_file(path)?;
+        }
         Ok(_) => {
             return Err(io::Error::new(
                 io::ErrorKind::AlreadyExists,

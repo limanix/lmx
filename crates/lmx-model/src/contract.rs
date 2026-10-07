@@ -79,6 +79,8 @@ pub enum ErrorCode {
     ApplyBuildFailed,
     /// The operation was cancelled by an explicit request.
     ApplyCancelled,
+    /// The environment files of the generation could not be installed.
+    ApplyEnvironmentFailed,
     /// Free bytes or inodes are below the platform minimum.
     DiskLow,
     /// The usage of the store file system cannot be read.
@@ -91,6 +93,10 @@ pub enum ErrorCode {
     GenerationMismatch,
     /// The caller requested a contract version this binary does not speak.
     ContractUnsupported,
+    /// The booted generation failed its health check.
+    SystemDegraded,
+    /// A wait ended before its condition held.
+    WaitTimeout,
     /// A code this binary does not know, as received.
     Other(String),
 }
@@ -103,12 +109,15 @@ impl ErrorCode {
             Self::OwnerUnavailable => "owner.unavailable",
             Self::ApplyBuildFailed => "apply.build_failed",
             Self::ApplyCancelled => "apply.cancelled",
+            Self::ApplyEnvironmentFailed => "apply.environment_failed",
             Self::DiskLow => "disk.low",
             Self::DiskUnreadable => "disk.unreadable",
             Self::NetworkUnreachable => "network.unreachable",
             Self::PermissionDenied => "permission.denied",
             Self::GenerationMismatch => "generation.mismatch",
             Self::ContractUnsupported => "contract.unsupported",
+            Self::SystemDegraded => "system.degraded",
+            Self::WaitTimeout => "wait.timeout",
             Self::Other(code) => code,
         }
     }
@@ -120,12 +129,15 @@ impl ErrorCode {
             "owner.unavailable" => Self::OwnerUnavailable,
             "apply.build_failed" => Self::ApplyBuildFailed,
             "apply.cancelled" => Self::ApplyCancelled,
+            "apply.environment_failed" => Self::ApplyEnvironmentFailed,
             "disk.low" => Self::DiskLow,
             "disk.unreadable" => Self::DiskUnreadable,
             "network.unreachable" => Self::NetworkUnreachable,
             "permission.denied" => Self::PermissionDenied,
             "generation.mismatch" => Self::GenerationMismatch,
             "contract.unsupported" => Self::ContractUnsupported,
+            "system.degraded" => Self::SystemDegraded,
+            "wait.timeout" => Self::WaitTimeout,
             other => Self::Other(other.to_owned()),
         }
     }
@@ -200,12 +212,18 @@ mod tests {
             (ErrorCode::OwnerUnavailable, "owner.unavailable"),
             (ErrorCode::ApplyBuildFailed, "apply.build_failed"),
             (ErrorCode::ApplyCancelled, "apply.cancelled"),
+            (
+                ErrorCode::ApplyEnvironmentFailed,
+                "apply.environment_failed",
+            ),
             (ErrorCode::DiskLow, "disk.low"),
             (ErrorCode::DiskUnreadable, "disk.unreadable"),
             (ErrorCode::NetworkUnreachable, "network.unreachable"),
             (ErrorCode::PermissionDenied, "permission.denied"),
             (ErrorCode::GenerationMismatch, "generation.mismatch"),
             (ErrorCode::ContractUnsupported, "contract.unsupported"),
+            (ErrorCode::SystemDegraded, "system.degraded"),
+            (ErrorCode::WaitTimeout, "wait.timeout"),
         ] {
             assert_eq!(serde_json::to_value(&code).expect("serialize"), name);
             assert_eq!(

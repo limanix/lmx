@@ -1,6 +1,9 @@
 //! Conversions between the `lmx.v1` messages and the `lmx-model` contract types.
 
-use lmx_model::{Condition, DiskUsage, ErrorBody, ErrorCode, Operation, Owner, Reserve};
+use lmx_model::{
+    Apply, ApplyEvent, ApplyPhase, ApplyState, CancelApply, Condition, DiskUsage, ErrorBody,
+    ErrorCode, Operation, OutputStream, Owner, Reserve,
+};
 use serde_json::{Map, Value};
 
 use crate::proto;
@@ -148,6 +151,143 @@ pub fn reserve_outcome(
     }
 }
 
+/// Wire name of an apply phase.
+const fn phase_name(phase: ApplyPhase) -> &'static str {
+    match phase {
+        ApplyPhase::Environment => "environment",
+        ApplyPhase::Reserve => "reserve",
+        ApplyPhase::Build => "build",
+    }
+}
+
+/// Apply phase with the wire name `name`.
+fn phase(name: &str) -> Option<ApplyPhase> {
+    [
+        ApplyPhase::Environment,
+        ApplyPhase::Reserve,
+        ApplyPhase::Build,
+    ]
+    .into_iter()
+    .find(|phase| phase_name(*phase) == name)
+}
+
+/// Wire name of an apply state.
+const fn state_name(state: ApplyState) -> &'static str {
+    match state {
+        ApplyState::Running => "running",
+        ApplyState::RestartRequired => "restart_required",
+    }
+}
+
+/// Apply state with the wire name `name`.
+fn state(name: &str) -> Option<ApplyState> {
+    [ApplyState::Running, ApplyState::RestartRequired]
+        .into_iter()
+        .find(|state| state_name(*state) == name)
+}
+
+impl From<ApplyEvent> for proto::ApplyEvent {
+    fn from(event: ApplyEvent) -> Self {
+        use proto::apply_event::Event;
+        let event = match event {
+            ApplyEvent::Phase { phase } => Event::Phase(phase_name(phase).to_owned()),
+            ApplyEvent::Output {
+                stream,
+                line,
+                truncated,
+            } => Event::Output(proto::OutputLine {
+                stderr: stream == OutputStream::Stderr,
+                line: line.into_bytes(),
+                truncated,
+            }),
+            ApplyEvent::Warning { code, message } => Event::Warning(
+                ErrorBody {
+                    code,
+                    message,
+                    details: Map::new(),
+                }
+                .into(),
+            ),
+            ApplyEvent::Lagged { skipped } => Event::Lagged(skipped),
+        };
+        Self { event: Some(event) }
+    }
+}
+
+/// The last event of an apply: how it ended, or that it runs.
+pub fn outcome_event(outcome: Result<Apply, ErrorBody>) -> proto::ApplyEvent {
+    let outcome = match outcome {
+        Ok(apply) => proto::apply_outcome::Outcome::Result(proto::ApplyResult {
+            generation: apply.generation,
+            state: state_name(apply.state).to_owned(),
+        }),
+        Err(error) => proto::apply_outcome::Outcome::Failure(error.into()),
+    };
+    proto::ApplyEvent {
+        event: Some(proto::apply_event::Event::Outcome(proto::ApplyOutcome {
+            outcome: Some(outcome),
+        })),
+    }
+}
+
+/// One `Apply` event as the client reads it.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ApplyMessage {
+    /// Progress of the apply.
+    Event(ApplyEvent),
+    /// How the apply ended, or that it runs; nothing follows.
+    Outcome(Result<Apply, ErrorBody>),
+}
+
+/// Reads one `Apply` event.
+pub fn apply_message(event: proto::ApplyEvent) -> Result<ApplyMessage, InvalidAnswer> {
+    use proto::apply_event::Event;
+    Ok(match event.event.ok_or(InvalidAnswer("an apply event"))? {
+        Event::Phase(name) => ApplyMessage::Event(ApplyEvent::Phase {
+            phase: phase(&name).ok_or(InvalidAnswer("a known apply phase"))?,
+        }),
+        Event::Output(output) => ApplyMessage::Event(ApplyEvent::Output {
+            stream: if output.stderr {
+                OutputStream::Stderr
+            } else {
+                OutputStream::Stdout
+            },
+            line: String::from_utf8_lossy(&output.line).into_owned(),
+            truncated: output.truncated,
+        }),
+        Event::Warning(failure) => {
+            let warning = ErrorBody::from(failure);
+            ApplyMessage::Event(ApplyEvent::Warning {
+                code: warning.code,
+                message: warning.message,
+            })
+        }
+        Event::Lagged(skipped) => ApplyMessage::Event(ApplyEvent::Lagged { skipped }),
+        Event::Outcome(outcome) => {
+            ApplyMessage::Outcome(match outcome.outcome.ok_or(InvalidAnswer("an outcome"))? {
+                proto::apply_outcome::Outcome::Result(result) => Ok(Apply {
+                    state: state(&result.state).ok_or(InvalidAnswer("a known apply state"))?,
+                    generation: result.generation,
+                }),
+                proto::apply_outcome::Outcome::Failure(failure) => Err(failure.into()),
+            })
+        }
+    })
+}
+
+/// Outcome of a `CancelApply` call: the answer, or the failure the contract names.
+pub fn cancel_outcome(
+    response: proto::CancelApplyResponse,
+) -> Result<Result<CancelApply, ErrorBody>, InvalidAnswer> {
+    match response.outcome {
+        Some(proto::cancel_apply_response::Outcome::Cancelled(cancelled)) => {
+            Ok(Ok(CancelApply { cancelled }))
+        }
+        Some(proto::cancel_apply_response::Outcome::Failure(failure)) => Ok(Err(failure.into())),
+        None => Err(InvalidAnswer("an outcome")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,6 +350,38 @@ mod tests {
             )),
         };
         assert_eq!(reserve_outcome(response), Ok(Err(error)));
+    }
+
+    #[test]
+    fn apply_events_and_outcomes_survive_the_wire() {
+        for event in [
+            ApplyEvent::Phase {
+                phase: ApplyPhase::Build,
+            },
+            ApplyEvent::Output {
+                stream: OutputStream::Stderr,
+                line: "building the system configuration...".into(),
+                truncated: true,
+            },
+            ApplyEvent::Warning {
+                code: ErrorCode::DiskLow,
+                message: "full".into(),
+            },
+            ApplyEvent::Lagged { skipped: 3 },
+        ] {
+            assert_eq!(
+                apply_message(event.clone().into()),
+                Ok(ApplyMessage::Event(event))
+            );
+        }
+        let applied = Apply {
+            generation: "0123456789ab".into(),
+            state: ApplyState::RestartRequired,
+        };
+        assert_eq!(
+            apply_message(outcome_event(Ok(applied.clone()))),
+            Ok(ApplyMessage::Outcome(Ok(applied)))
+        );
     }
 
     #[test]

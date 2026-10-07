@@ -1,6 +1,11 @@
 //! Starting `lmxd` and serving its socket.
 
-use std::{future::Future, path::Path, sync::Arc, time::Duration};
+use std::{
+    future::Future,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 use lmx_ipc::proto::owner_server::OwnerServer;
 use lmx_model::Config;
@@ -15,11 +20,15 @@ use tokio_stream::wrappers::UnixListenerStream;
 use tonic::{service::interceptor::InterceptedService, transport::Server};
 
 use crate::{
+    apply::Applier,
     auth::{PeerIdentity, TaskAccess},
+    capture::Capture,
     journal::Journal,
+    observer::{self, Observer, ObserverSchedule},
     owner::OwnerService,
+    paths::Paths,
     store::{self, GuardSchedule, Store, UsageSource},
-    tasks::{self, RegisterError},
+    tasks::{self, RegisterError, Setup},
 };
 
 /// Longest wait for open connections, such as a client following a stream, when stopping.
@@ -39,6 +48,12 @@ pub struct Options {
     pub usage: UsageSource,
     /// When the store guard checks the disk; `None` turns the guard off.
     pub guard: Option<GuardSchedule>,
+    /// When the generation observer looks at the booted generation; `None` turns it off, as in the
+    /// transient daemon of an update.
+    pub observer: Option<ObserverSchedule>,
+    /// System root of the guest paths besides the store and the socket: `/` in a guest, a prepared
+    /// tree in tests.
+    pub root: PathBuf,
 }
 
 impl std::fmt::Debug for Options {
@@ -47,6 +62,8 @@ impl std::fmt::Debug for Options {
             .debug_struct("Options")
             .field("config", &self.config)
             .field("guard", &self.guard)
+            .field("observer", &self.observer)
+            .field("root", &self.root)
             .finish_non_exhaustive()
     }
 }
@@ -79,44 +96,89 @@ pub struct Daemon {
     subprocess: Arc<SubprocessRunner>,
     /// Store operations.
     store: Arc<Store>,
-    /// The store guard, when it runs.
-    guard: Option<JoinHandle<()>>,
+    /// The apply operation.
+    applier: Arc<Applier>,
+    /// The generation observer, when it runs.
+    observer: Option<Arc<Observer>>,
+    /// Guest locations.
+    paths: Paths,
+    /// The store guard and the observer loop, while they run.
+    background: Vec<JoinHandle<()>>,
 }
 
 impl std::fmt::Debug for Daemon {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("Daemon")
-            .field("guard", &self.guard.is_some())
+            .field("paths", &self.paths)
+            .field("observer", &self.observer.is_some())
             .finish_non_exhaustive()
     }
 }
 
 impl Daemon {
-    /// Starts the supervisor, the runners and, when scheduled, the store guard.
+    /// Starts the supervisor, the runners and, when scheduled, the store guard and the generation
+    /// observer.
     pub async fn start(options: Options) -> Result<Self, Error> {
-        check(&options.config)?;
+        let Options {
+            config,
+            usage,
+            guard,
+            observer: observing,
+            root,
+        } = options;
+        check(&config)?;
+        let paths = Paths::new(root);
+        let capture = Arc::new(Capture::default());
+        let setup = Setup {
+            tools: config.tools.clone(),
+            paths: paths.clone(),
+            user: config.user.name.clone(),
+            units: config.health.units.clone(),
+        };
         let mut router = RunnerRouter::new();
-        let subprocess = tasks::register(&mut router, options.config.tools.clone())?;
+        let subprocess = tasks::register(&mut router, setup, Arc::clone(&capture))?;
         let supervisor = Arc::new(
             SupervisorApi::builder(router)
                 .with_output_sink(Arc::new(Journal))
                 .start()
                 .await?,
         );
-        let store = Arc::new(Store::new(
+        let store = Arc::new(Store::new(Arc::clone(&supervisor), config.disk, usage));
+        let applier = Arc::new(Applier::new(
             Arc::clone(&supervisor),
-            options.config.disk,
-            options.usage,
+            Arc::clone(&store),
+            Arc::clone(&capture),
+            paths.clone(),
+            config.user.gid,
         ));
-        let guard = options
-            .guard
-            .map(|schedule| tokio::spawn(store::guard(Arc::clone(&store), schedule)));
+
+        let mut background = Vec::new();
+        if let Some(schedule) = guard {
+            background.push(tokio::spawn(store::guard(Arc::clone(&store), schedule)));
+        }
+        let observer = observing.map(|schedule| {
+            let observer = Arc::new(Observer::new(
+                Arc::clone(&supervisor),
+                Arc::clone(&store),
+                capture,
+                paths.clone(),
+                config.user.home.clone(),
+            ));
+            background.push(tokio::spawn(observer::observe(
+                Arc::clone(&observer),
+                schedule,
+            )));
+            observer
+        });
         Ok(Self {
             supervisor,
             subprocess,
             store,
-            guard,
+            applier,
+            observer,
+            paths,
+            background,
         })
     }
 
@@ -137,6 +199,9 @@ impl Daemon {
         .server();
         let owner = OwnerServer::new(OwnerService {
             store: Arc::clone(&self.store),
+            applier: Arc::clone(&self.applier),
+            observer: self.observer.clone(),
+            paths: self.paths.clone(),
             supervisor: Arc::clone(&self.supervisor),
             own_uid,
         });
@@ -157,9 +222,10 @@ impl Daemon {
             served = &mut server => Some(served),
         };
         stop_serving.notify_one();
-        if let Some(guard) = &self.guard {
-            guard.abort();
+        for task in &self.background {
+            task.abort();
         }
+        self.applier.stopping();
         let (drained, stopped) = tokio::join!(
             async {
                 match served {
@@ -193,6 +259,12 @@ fn check(config: &Config) -> Result<(), Error> {
         ("nice", &tools.nice),
         ("ionice", &tools.ionice),
         ("grep", &tools.grep),
+        ("systemctl", &tools.systemctl),
+        ("nixos_rebuild", &tools.nixos_rebuild),
+        ("nix_env", &tools.nix_env),
+        ("sudo", &tools.sudo),
+        ("bash", &tools.bash),
+        ("systemd_run", &tools.systemd_run),
     ] {
         if !Path::new(path).is_absolute() {
             return Err(Error::Config(format!(
@@ -221,9 +293,10 @@ mod tests {
             "schema": 1,
             "vm": {"name": "dev-box", "arch": "arm64", "system": "NixOS 26.05"},
             "generation": "0123456789ab",
-            "user": {"name": "dev", "home": "/home/dev", "uid": 501},
+            "user": {"name": "dev", "home": "/home/dev", "uid": 501, "gid": 100},
             "modules": [],
             "disk": {"collect_percent": 20, "minimum_percent": 10},
+            "health": {"units": ["sshd.service"]},
             "session": {"command": null, "providers": []},
             "tools": {
                 "ip": tool("ip"),
@@ -231,7 +304,12 @@ mod tests {
                 "nix_store": tool("nix-store"),
                 "nice": tool("nice"),
                 "ionice": tool("ionice"),
-                "grep": tool("grep")
+                "grep": tool("grep"),
+                "nixos_rebuild": tool("nixos-rebuild"),
+                "nix_env": tool("nix-env"),
+                "sudo": "/run/wrappers/bin/sudo",
+                "bash": tool("bash"),
+                "systemd_run": tool("systemd-run")
             }
         });
         Config::from_json(json.to_string().as_bytes()).expect("valid configuration")

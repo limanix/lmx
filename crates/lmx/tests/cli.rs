@@ -110,9 +110,10 @@ impl Guest {
             "schema": 1,
             "vm": {"name": "dev-box", "arch": "arm64", "system": "NixOS 26.05"},
             "generation": "ba9876543210",
-            "user": {"name": "dev", "home": "/home/dev", "uid": 501},
+            "user": {"name": "dev", "home": "/home/dev", "uid": 501, "gid": 100},
             "modules": [],
             "disk": {"collect_percent": 20, "minimum_percent": 10},
+            "health": {"units": ["sshd.service"]},
             "session": {"command": null, "providers": []},
             "tools": {
                 "ip": tools.ip,
@@ -120,7 +121,12 @@ impl Guest {
                 "nix_store": "/run/current-system/sw/bin/nix-store",
                 "nice": "/run/current-system/sw/bin/nice",
                 "ionice": "/run/current-system/sw/bin/ionice",
-                "grep": "/run/current-system/sw/bin/grep"
+                "grep": "/run/current-system/sw/bin/grep",
+                "nixos_rebuild": "/run/current-system/sw/bin/nixos-rebuild",
+                "nix_env": "/run/current-system/sw/bin/nix-env",
+                "sudo": "/run/wrappers/bin/sudo",
+                "bash": "/run/current-system/sw/bin/bash",
+                "systemd_run": "/run/current-system/sw/bin/systemd-run"
             }
         });
         guest.write("etc/lmx/config.json", &config.to_string());
@@ -369,13 +375,29 @@ fn status_names_an_unreadable_disk() {
 }
 
 #[test]
-fn store_reserve_without_lmxd_reports_an_unavailable_owner() {
+fn owner_operations_without_lmxd_report_an_unavailable_owner() {
     let guest = Guest::new();
-    let output = guest.lmx(&["store", "reserve", "--json"], &guest.config());
-    assert_eq!(output.status.code(), Some(3), "{output:?}");
-    let answer: Value = serde_json::from_slice(&output.stdout).expect("one JSON answer");
-    assert_eq!(answer["ok"], false);
-    assert_eq!(answer["error"]["code"], "owner.unavailable");
+    for args in [
+        &["store", "reserve", "--json"][..],
+        &["apply", "-g", "0123456789ab", "--json"],
+        &["apply", "cancel", "-g", "0123456789ab", "--json"],
+        &[
+            "status",
+            "--wait",
+            "converged",
+            "-g",
+            "0123456789ab",
+            "--timeout",
+            "1s",
+            "--json",
+        ],
+    ] {
+        let output = guest.lmx(args, &guest.config());
+        assert_eq!(output.status.code(), Some(3), "{args:?}: {output:?}");
+        let answer: Value = serde_json::from_slice(&output.stdout).expect("one JSON answer");
+        assert_eq!(answer["ok"], false, "{args:?}");
+        assert_eq!(answer["error"]["code"], "owner.unavailable", "{args:?}");
+    }
 }
 
 #[test]

@@ -5,15 +5,10 @@
 
 use std::{io, process::ExitCode};
 
-use lmx_model::{Envelope, ErrorBody, ErrorCode, Reserve, Shortage};
-use serde_json::{Map, Value};
+use lmx_model::{Envelope, ErrorBody, Reserve, Shortage};
+use serde_json::Value;
 
-use crate::{
-    cli::OutputArgs,
-    format, output,
-    owner::{self, CallError},
-    system::System,
-};
+use crate::{cli::OutputArgs, format, output, owner, system::System};
 
 /// Runs `lmx store reserve`.
 pub(crate) fn reserve(system: &System, args: &OutputArgs) -> io::Result<ExitCode> {
@@ -26,34 +21,19 @@ pub(crate) fn reserve(system: &System, args: &OutputArgs) -> io::Result<ExitCode
             }
             Ok(ExitCode::SUCCESS)
         }
-        Ok(Err(error)) => fail(args, error, output::FAILURE),
-        Err(CallError::Unavailable(message)) => fail(
-            args,
-            ErrorBody {
-                code: ErrorCode::OwnerUnavailable,
-                message,
-                details: Map::new(),
-            },
-            output::UNAVAILABLE,
-        ),
-        Err(error @ CallError::Failed(_)) => {
-            eprintln!("lmx: {error}");
-            Ok(ExitCode::from(output::FAILURE))
-        }
+        Ok(Err(error)) => fail(args, error),
+        Err(error) => owner::report(error, args.json),
     }
 }
 
-/// Reports `error` and exits with `status`.
-fn fail(args: &OutputArgs, error: ErrorBody, status: u8) -> io::Result<ExitCode> {
-    if args.json {
-        output::write_json(&Envelope::<()>::failure(error))?;
-    } else {
-        eprintln!("lmx: {}", error.message);
-        if let Ok(shortage) = serde_json::from_value::<Shortage>(Value::Object(error.details)) {
-            eprintln!("Guest disk: {}.", format::disk(&shortage.after));
-        }
+/// Reports a failed reserve; people also see the disk a shortage left.
+fn fail(args: &OutputArgs, error: ErrorBody) -> io::Result<ExitCode> {
+    let shortage = serde_json::from_value::<Shortage>(Value::Object(error.details.clone()));
+    let status = output::failure(args.json, error, output::FAILURE)?;
+    if let (false, Ok(shortage)) = (args.json, shortage) {
+        eprintln!("Guest disk: {}.", format::disk(&shortage.after));
     }
-    Ok(ExitCode::from(status))
+    Ok(status)
 }
 
 /// Renders a reserve for people.

@@ -18,7 +18,10 @@ person or host ──► lmx (binary) ──► lmx-facts readers ──► stat
                          ├──► the caller's terminal or tmux, the session provider
                          └──► lmx-ipc ── gRPC, /run/lmx/lmx.sock ──► lmxd (root, systemd)
                                                                       ├──► store guard and reserve
-                                                                      └──► Solti tasks ──► nix-store
+                                                                      ├──► apply, health and finalize
+                                                                      └──► Solti tasks ──► nix-store, nixos-rebuild,
+                                                                                           nix-env, systemctl, sudo,
+                                                                                           systemd-run
 ```
 
 `lmx-model` holds every value that crosses a boundary: the configuration written by NixOS and the answers read by the host.
@@ -38,26 +41,30 @@ Caller commands, the welcome, the clipboard and sessions, depend on the caller's
 - Caller commands need the caller's terminal and environment, so they stay in the `lmx` process and never move into a daemon.
 - Owner operations run only in `lmxd`. `lmx` never runs them itself when the daemon is unavailable.
 - `lmx-ipc` and `lmx` do not depend on Solti; only `lmxd` does.
-- `lmxd` runs programs only as Solti tasks, never with `std::process`: tools by their absolute paths in the configuration, and `/bin/sh` for the roots report.
+- `lmxd` runs programs only as Solti tasks, never with `std::process`: tools by their absolute paths in the configuration, and `/bin/sh` for the roots report, the health check and finalize.
+- An apply's state lives in `lmxd`'s memory; after a restart the generation markers are the truth. Finalize runs only in the daemon of the booted system, never in `lmxd --transient`.
+- One daemon serves the socket at a time: `lmxd` refuses a socket that another daemon still serves, so two daemons never apply at once.
 - Only `lmxd` creates its tasks. The Task API on its socket reads them, and root may cancel or delete them.
 - `pbcopy`, `pbpaste` and `limanix-session` keep the syntax of the shell commands they replaced; change them together with the platform.
 
 ## Source map
 
-| Area              | Responsibility                                                 | Start here                                                                    |
-| ----------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Contract types    | Configuration, envelope, error codes, status and version       | [`lmx-model/src/lib.rs`](crates/lmx-model/src/lib.rs)                         |
-| Fact readers      | Disk, generations, machine, mounts, network and failed units   | [`lmx-facts/src/lib.rs`](crates/lmx-facts/src/lib.rs)                         |
-| Command line      | Commands, other names, output selection and exit codes         | [`lmx/src/main.rs`](crates/lmx/src/main.rs)                                   |
-| Status            | Collecting facts and rendering them                            | [`lmx/src/status.rs`](crates/lmx/src/status.rs)                               |
-| Guest pages       | Help, info and the welcome for people in the guest             | [`lmx/src/welcome.rs`](crates/lmx/src/welcome.rs)                             |
-| Terminal text     | Columns, wrapping and the palette                              | [`lmx/src/layout.rs`](crates/lmx/src/layout.rs)                               |
-| Caller commands   | The clipboard through the terminal or tmux, and named sessions | [`lmx/src/clipboard.rs`](crates/lmx/src/clipboard.rs)                         |
-| Owner calls       | `lmx store reserve` and the owner part of `lmx status`         | [`lmx/src/owner.rs`](crates/lmx/src/owner.rs)                                 |
-| IPC               | The `lmx.v1.Owner` protocol and its Unix-socket client         | [`lmx-ipc/proto/lmx/v1/owner.proto`](crates/lmx-ipc/proto/lmx/v1/owner.proto) |
-| Daemon            | Startup, serving the socket, systemd and the stopping order    | [`lmxd/src/main.rs`](crates/lmxd/src/main.rs)                                 |
-| Store domain      | The guard, reserve, conditions and the store tasks             | [`lmxd/src/store.rs`](crates/lmxd/src/store.rs)                               |
-| Contract examples | Published answers of each contract version                     | [`contract/v1/`](contract/v1)                                                 |
+| Area                | Responsibility                                                                    | Start here                                                                    |
+| ------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Contract types      | Configuration, envelope, error codes, status, apply and version                   | [`lmx-model/src/lib.rs`](crates/lmx-model/src/lib.rs)                         |
+| Fact readers        | Disk, generations, machine, mounts, network and failed units                      | [`lmx-facts/src/lib.rs`](crates/lmx-facts/src/lib.rs)                         |
+| Command line        | Commands, other names, output selection and exit codes                            | [`lmx/src/main.rs`](crates/lmx/src/main.rs)                                   |
+| Status              | Collecting facts and rendering them                                               | [`lmx/src/status.rs`](crates/lmx/src/status.rs)                               |
+| Guest pages         | Help, info and the welcome for people in the guest                                | [`lmx/src/welcome.rs`](crates/lmx/src/welcome.rs)                             |
+| Terminal text       | Columns, wrapping and the palette                                                 | [`lmx/src/layout.rs`](crates/lmx/src/layout.rs)                               |
+| Caller commands     | The clipboard through the terminal or tmux, and named sessions                    | [`lmx/src/clipboard.rs`](crates/lmx/src/clipboard.rs)                         |
+| Owner calls         | `lmx store reserve`, `lmx apply`, and the owner part and the wait of `lmx status` | [`lmx/src/owner.rs`](crates/lmx/src/owner.rs)                                 |
+| IPC                 | The `lmx.v1.Owner` protocol and its Unix-socket client                            | [`lmx-ipc/proto/lmx/v1/owner.proto`](crates/lmx-ipc/proto/lmx/v1/owner.proto) |
+| Daemon              | Startup, serving the socket, systemd and the stopping order                       | [`lmxd/src/main.rs`](crates/lmxd/src/main.rs)                                 |
+| Store domain        | The guard, reserve, conditions and the store tasks                                | [`lmxd/src/store.rs`](crates/lmxd/src/store.rs)                               |
+| Apply               | Environment files, reserve and build of a mounted generation, and its followers   | [`lmxd/src/apply.rs`](crates/lmxd/src/apply.rs)                               |
+| Generation observer | Health check, finalize and the generation conditions                              | [`lmxd/src/observer.rs`](crates/lmxd/src/observer.rs)                         |
+| Contract examples   | Published answers of each contract version                                        | [`contract/v1/`](contract/v1)                                                 |
 
 Files outside `crates/` provide executable context:
 

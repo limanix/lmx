@@ -9,6 +9,10 @@ service Owner {
   rpc Status(StatusRequest) returns (StatusResponse);
   // Collects unreferenced store paths when free space is low. Root only.
   rpc Reserve(ReserveRequest) returns (ReserveResponse);
+  // Builds the mounted generation for the next boot and streams its progress. Root only.
+  rpc Apply(ApplyRequest) returns (stream ApplyEvent);
+  // Cancels the apply of a generation. Root only.
+  rpc CancelApply(CancelApplyRequest) returns (CancelApplyResponse);
 }
 
 // Usage of one file system, as in the host contract.
@@ -90,6 +94,77 @@ message ReserveResponse {
     // The reserve succeeded.
     ReserveResult result = 1;
     // The reserve failed.
+    Failure failure = 2;
+  }
+}
+
+// Input of `Apply`.
+message ApplyRequest {
+  // Generation to apply; it must be the one mounted at `/mnt/limanix`.
+  string generation = 1;
+  // Whether to stream the progress; without it the answer comes once the apply runs.
+  bool follow = 2;
+}
+
+// One event of `Apply`; the last one is the outcome.
+message ApplyEvent {
+  // What happened.
+  oneof event {
+    // A phase started: `environment`, `reserve` or `build`.
+    string phase = 1;
+    // A line the build printed.
+    OutputLine output = 2;
+    // A problem that does not stop the apply, such as `disk.low`.
+    Failure warning = 3;
+    // Number of events the follower missed.
+    uint64 lagged = 4;
+    // How the apply ended, or that it runs when it is not followed.
+    ApplyOutcome outcome = 5;
+  }
+}
+
+// A line the build printed.
+message OutputLine {
+  // Whether the line came from standard error.
+  bool stderr = 1;
+  // The line, without its newline.
+  bytes line = 2;
+  // Whether the end of a long line was cut.
+  bool truncated = 3;
+}
+
+// How an apply ended.
+message ApplyOutcome {
+  // A result, or a failure such as `apply.build_failed`.
+  oneof outcome {
+    // The generation and its state.
+    ApplyResult result = 1;
+    // The apply failed.
+    Failure failure = 2;
+  }
+}
+
+// The generation of an apply and its state.
+message ApplyResult {
+  // The generation applied.
+  string generation = 1;
+  // `running` or `restart_required`.
+  string state = 2;
+}
+
+// Input of `CancelApply`.
+message CancelApplyRequest {
+  // Generation whose apply to cancel.
+  string generation = 1;
+}
+
+// Output of `CancelApply`.
+message CancelApplyResponse {
+  // Whether an apply was cancelled, or a failure such as `permission.denied`.
+  oneof outcome {
+    // Whether an apply of the generation was running and is now cancelled.
+    bool cancelled = 1;
+    // The cancel failed.
     Failure failure = 2;
   }
 }

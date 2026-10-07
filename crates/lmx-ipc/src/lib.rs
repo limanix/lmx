@@ -18,7 +18,9 @@ mod client;
 mod convert;
 
 pub use client::connect;
-pub use convert::{InvalidAnswer, reserve_outcome};
+pub use convert::{
+    ApplyMessage, InvalidAnswer, apply_message, cancel_outcome, outcome_event, reserve_outcome,
+};
 pub use tonic;
 
 /// Path of the socket inside a booted guest.

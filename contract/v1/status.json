@@ -38,7 +38,12 @@
     "failed_units": [],
     "owner": {
       "version": "0.1.0",
-      "conditions": [],
+      "conditions": [
+        {
+          "type": "RestartRequired",
+          "message": "Generation 0123456789ab is built; restart the VM to boot it."
+        }
+      ],
       "operations": [
         {
           "task": "store-collect-1",

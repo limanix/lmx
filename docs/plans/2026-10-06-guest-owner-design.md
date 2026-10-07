@@ -6,7 +6,10 @@ implemented: help, info, welcome, clipboard and sessions in the binary. See
 [the M1b plan](2026-10-06-m1b-lmx-user-surface.md). The S1 spike passed; its findings
 for M2 are in [the S1 results](2026-10-07-s1-solti-spike.md). M2 is implemented: `lmxd` keeps room
 in the Nix store and answers `lmx store reserve`. See [the M2 design](2026-10-07-m2-lmxd-store-design.md)
-and [the M2 plan](2026-10-07-m2-lmxd-store.md).
+and [the M2 plan](2026-10-07-m2-lmxd-store.md). M3 is implemented in this repository: apply, cancel,
+the transient daemon, the health check, finalize and the converged wait; the host switches to them in
+M1c. See [the M3 design](2026-10-07-m3-apply-finalize-design.md) and
+[the M3 plan](2026-10-07-m3-apply-finalize.md).
 
 Scope: this repository, plus the changes it requires in `client` (host and
 platform base) and `modules` (catalog).
@@ -289,7 +292,7 @@ they show up the same way in `lmx ps`, logs and history.
 
 | Task | Does | Slot | Started |
 |---|---|---|---|
-| `SystemApply{G}` | Check the mounted G → install ENV → reserve through `StoreCollect` → `nixos-rebuild boot` | `system`, replace | Only by the host |
+| `SystemApply{G}` | Check the mounted G → install ENV → reserve through `StoreCollect` → `nixos-rebuild boot` | `system`, queued | Only by the host |
 | `SystemFinalize{G}` | Health check → delete older generations → `switch-to-configuration boot` → collect | `system` | Automatically when desired = built = booted and there is something to finalize |
 | `StoreCollect` | `nix-store --gc` | `store`, queue | By reserve, guard and apply |
 | `StoreGuard` | Every 15 minutes, compare usage with the thresholds and start `StoreCollect` if needed; below the minimum, report GC roots | Periodic | Always; skips a tick while `system` is busy |

@@ -1,0 +1,9 @@
+{"event":"phase","phase":"environment"}
+{"event":"phase","phase":"reserve"}
+{"event":"warning","code":"disk.low","message":"Less than 10% of the guest disk is still free after collecting unreferenced store paths."}
+{"event":"phase","phase":"build"}
+{"event":"output","stream":"stderr","line":"building the system configuration..."}
+{"event":"output","stream":"stderr","line":"these 12 derivations will be built:","truncated":true}
+{"event":"lagged","skipped":12}
+{"event":"output","stream":"stdout","line":"/nix/store/00000000000000000000000000000000-nixos-system-dev-box-26.05"}
+{"contract":1,"ok":true,"data":{"generation":"0123456789ab","state":"restart_required"}}

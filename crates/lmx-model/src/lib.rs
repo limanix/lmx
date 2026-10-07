@@ -13,6 +13,7 @@
 //! | [`Status`]   | `lmx status`                            | the host and people     |
 //! | [`Owner`]    | `lmxd`, through `lmx status`            | the host and people     |
 //! | [`Reserve`]  | `lmx store reserve`                     | the host                |
+//! | [`Apply`]    | `lmx apply`, with [`ApplyEvent`]s       | the host and people     |
 //! | [`Version`]  | `lmx version`                           | the host and people     |
 //!
 //! JSON field names are `snake_case`. The host contract is versioned by [`CONTRACT_VERSION`] and
@@ -22,6 +23,7 @@
 //! `lmx-facts`.
 #![forbid(unsafe_code)]
 
+mod apply;
 mod config;
 mod contract;
 mod owner;
@@ -29,11 +31,16 @@ mod status;
 mod store;
 mod version;
 
+pub use apply::{
+    Apply, ApplyEvent, ApplyPhase, ApplyState, BuildFailure, CancelApply, OutputStream,
+};
 pub use config::{
-    CONFIG_PATH, CONFIG_SCHEMA, Config, ConfigError, DiskPolicy, Session, Tools, User, Vm,
+    CONFIG_PATH, CONFIG_SCHEMA, Config, ConfigError, DiskPolicy, Health, Session, Tools, User, Vm,
 };
 pub use contract::{CONTRACT_VERSION, Envelope, ErrorBody, ErrorCode};
-pub use owner::{Condition, DISK_LOW, Operation, Owner};
+pub use owner::{
+    CONVERGED, Condition, DEGRADED, DISK_LOW, OUT_OF_DATE, Operation, Owner, RESTART_REQUIRED,
+};
 pub use status::{DiskUsage, Generations, Interface, Problem, Status};
 pub use store::{Reserve, Shortage};
 pub use version::Version;

@@ -79,7 +79,7 @@ pub(crate) fn modules(config: &Config) -> String {
 
 #[cfg(test)]
 mod tests {
-    use lmx_model::{Config, DiskPolicy, Session, Tools, User, Vm};
+    use lmx_model::{Config, DiskPolicy, Health, Session, Tools, User, Vm};
 
     use super::*;
 
@@ -97,12 +97,14 @@ mod tests {
                 name: "dev".into(),
                 home: "/home/dev".into(),
                 uid: 501,
+                gid: 100,
             },
             modules: vec![],
             disk: DiskPolicy {
                 collect_percent: 20,
                 minimum_percent: 10,
             },
+            health: Health { units: vec![] },
             session: Session {
                 command: None,
                 providers: vec!["lmx:tmux".into()],
@@ -114,6 +116,11 @@ mod tests {
                 nice: "nice".into(),
                 ionice: "ionice".into(),
                 grep: "grep".into(),
+                nixos_rebuild: "nixos-rebuild".into(),
+                nix_env: "nix-env".into(),
+                sudo: "sudo".into(),
+                bash: "bash".into(),
+                systemd_run: "systemd-run".into(),
             },
         }
     }

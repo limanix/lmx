@@ -11,13 +11,17 @@
 //! | `lmx status`          | facts  | generations, disk, interfaces, failed units, and `lmxd`     |
 //! | `lmx version`         | facts  | the binary version and the host contract it speaks          |
 //! | `lmx store reserve`   | owner  | room in the store before the host stops the VM, in `lmxd`   |
+//! | `lmx apply -g G`      | owner  | builds generation G for the next boot, in `lmxd`            |
+//! | `lmx apply cancel`    | owner  | stops the apply of a generation                             |
 //! | `lmx clipboard copy`  | caller | copies standard input to the Mac clipboard                  |
 //! | `lmx clipboard paste` | caller | prints the Mac clipboard, if the terminal allows reads      |
 //! | `lmx session NAME`    | caller | opens a named session with the selected provider            |
 //!
 //! Facts are read in the caller's process with the caller's privileges and need no daemon. Owner
 //! operations run only in the guest owner daemon `lmxd`; without it they fail with exit status 3.
-//! Caller commands act on the caller's terminal and environment, so only the caller can run them.
+//! `lmx status --wait converged -g G` is one too: it answers once `lmxd` reports generation G
+//! settled after a restart. Caller commands act on the caller's terminal and environment, so only
+//! the caller can run them.
 //!
 //! ## Other names
 //!
@@ -44,6 +48,7 @@
 //! | `LMX_PASTE_TIMEOUT` | the 10 seconds `pbpaste` waits for a reply, in seconds                    |
 #![forbid(unsafe_code)]
 
+mod apply;
 mod cli;
 mod clipboard;
 mod format;
@@ -59,6 +64,7 @@ mod status;
 mod store;
 mod system;
 mod version;
+mod wait;
 mod welcome;
 
 use std::{
@@ -72,7 +78,7 @@ use std::{
 use clap::Parser;
 
 use crate::{
-    cli::{Cli, ClipboardCommand, Command, StoreCommand},
+    cli::{ApplyArgs, ApplyCommand, Cli, ClipboardCommand, Command, StoreCommand},
     system::System,
 };
 
@@ -125,6 +131,20 @@ fn lmx(mut arguments: Vec<OsString>) -> io::Result<ExitCode> {
         Some(Command::Store(StoreCommand::Reserve(args))) => {
             store::reserve(&System::from_environment(), &args)
         }
+        Some(Command::Apply(ApplyArgs {
+            command: Some(ApplyCommand::Cancel(args)),
+            ..
+        })) => apply::cancel(
+            &System::from_environment(),
+            &args.generation,
+            args.output.json,
+        ),
+        Some(Command::Apply(args)) => apply::run(
+            &System::from_environment(),
+            args.generation.as_deref().unwrap_or_default(),
+            args.follow,
+            args.output.json,
+        ),
         Some(Command::Clipboard(ClipboardCommand::Copy)) => clipboard::copy(),
         Some(Command::Clipboard(ClipboardCommand::Paste)) => clipboard::paste(),
         Some(Command::Session(args)) => {

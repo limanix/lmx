@@ -26,14 +26,14 @@ use lmx_model::{
 use serde_json::{Map, Value};
 use solti::{
     core::SupervisorApi,
-    model::{
-        AdmissionPolicy, RestartPolicy, TaskId, TaskManifest, TaskPhase, TaskSpec, TaskStatus,
-        TaskWorkload,
-    },
+    model::{AdmissionPolicy, TaskId, TaskWorkload},
 };
 use tokio::sync::Mutex;
 
-use crate::tasks::{self, Kind, Priority};
+use crate::{
+    launch::{self, Placement},
+    tasks::{self, Kind, Priority},
+};
 
 /// Reads the usage of the store file system, or says why it cannot.
 pub type UsageSource = Arc<dyn Fn() -> Result<DiskUsage, String> + Send + Sync>;
@@ -46,9 +46,6 @@ const COLLECT_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60);
 
 /// Longest the roots report may run.
 const ROOTS_TIMEOUT: Duration = Duration::from_secs(10 * 60);
-
-/// How often a waiting caller checks its task.
-const POLL: Duration = Duration::from_millis(100);
 
 /// When the store guard checks the disk.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -195,8 +192,16 @@ impl Store {
         }
     }
 
+    /// Usage of the store disk, when it is below the platform minimum or `full` says the disk ran
+    /// out, so a failure can be explained as a full disk.
+    pub(crate) fn shortage(&self, full: bool) -> Option<DiskUsage> {
+        (self.usage)()
+            .ok()
+            .filter(|usage| full || usage.below(self.policy.minimum_percent))
+    }
+
     /// Waits for the active collection, or starts one at `priority` and waits for it.
-    async fn collect(&self, priority: Priority) -> Result<(), String> {
+    pub(crate) async fn collect(&self, priority: Priority) -> Result<(), String> {
         let name = {
             let mut collection = self.collection.lock().await;
             match collection.as_ref().filter(|name| self.active(name)) {
@@ -238,58 +243,27 @@ impl Store {
     ) -> Result<TaskId, String> {
         let number = self.created.fetch_add(1, Ordering::Relaxed) + 1;
         let name = format!("{}-{number}", kind.task_prefix());
-        let timeout = u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX);
-        let spec = TaskSpec::builder(SLOT, workload, timeout)
-            .restart(RestartPolicy::Never)
-            .admission(AdmissionPolicy::Queue)
-            .build()
-            .map_err(|error| error.to_string())?;
-        let manifest = TaskManifest::new(&name, spec).map_err(|error| error.to_string())?;
-        let task = self
-            .supervisor
-            .create_task(manifest)
-            .await
-            .map_err(|error| error.to_string())?;
-        Ok(task.name().clone())
+        let placement = Placement {
+            slot: SLOT,
+            admission: AdmissionPolicy::Queue,
+            timeout,
+        };
+        launch::start(&self.supervisor, &name, workload, placement).await
     }
 
-    /// Whether the task `name` will still run: pending or running, and built by its runner.
-    ///
-    /// A task whose runner could not build it stays pending for good, so it is not active.
+    /// Whether the task `name` will still run.
     fn active(&self, name: &TaskId) -> bool {
         self.supervisor
             .get_task(name)
-            .is_some_and(|task| runs(task.status()))
+            .is_some_and(|task| launch::runs(task.status()))
     }
 
     /// Waits until the task `name` ends; an outcome other than success is an error.
     async fn finished(&self, name: &TaskId) -> Result<(), String> {
-        let mut poll = tokio::time::interval(POLL);
-        loop {
-            poll.tick().await;
-            let Some(task) = self.supervisor.get_task(name) else {
-                return Err(format!("task {name} was removed"));
-            };
-            let status = task.status();
-            if status.reconciliation_failed() {
-                return Err(status.reconciled().message().to_owned());
-            }
-            let phase = status.phase();
-            if phase == TaskPhase::Succeeded {
-                return Ok(());
-            }
-            if phase.is_terminal() {
-                return Err(status
-                    .error()
-                    .map_or_else(|| format!("task {name} ended {phase}"), ToOwned::to_owned));
-            }
-        }
+        launch::finished(&self.supervisor, name)
+            .await
+            .map_err(|ended| ended.message)
     }
-}
-
-/// Whether a task with `status` is pending or running, and its runner built it.
-pub(crate) fn runs(status: &TaskStatus) -> bool {
-    status.phase().is_active() && !status.reconciliation_failed()
 }
 
 /// Error of a reserve whose disk usage cannot be read.
