@@ -71,7 +71,7 @@ pub struct User {
     pub home: String,
     /// Numeric user ID; equals the user's ID on the Mac.
     pub uid: u32,
-    /// Numeric ID of the user's primary group, which owns the environment files.
+    /// Numeric ID of a group of the development account; the environment files belong to it.
     pub gid: u32,
 }
 

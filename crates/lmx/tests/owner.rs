@@ -59,10 +59,15 @@ printf 'nix-env %s\n' "$*" >> "$root/calls"
 /bin/rm -f "$2-1-link"
 "#;
 
-/// Fake `switch-to-configuration` inside the system profile: logs its call.
+/// Fake `switch-to-configuration` inside the system profile: logs its call, and fails when the file
+/// `finalize` says `fail`.
 const SWITCH_TO_CONFIGURATION: &str = r#"#!/bin/sh
 root=${0%/nix/var/nix/profiles/system/bin/*}
 printf 'switch-to-configuration %s\n' "$*" >> "$root/calls"
+if [ "$(/bin/cat "$root/finalize" 2>/dev/null)" = fail ]; then
+  echo 'boot loader update failed' >&2
+  exit 1
+fi
 "#;
 
 /// Fake `systemctl`: logs its call; every unit is active.
@@ -590,6 +595,48 @@ fn a_healthy_booted_generation_is_finalized_and_converges() {
     ] {
         assert!(calls.contains(&call), "{call} missing from {calls:?}");
     }
+}
+
+#[test]
+fn a_failed_finalize_ends_the_wait_at_once() {
+    let guest = Guest::observed();
+    guest.write("finalize", "fail");
+    guest.mount("g1", "g1", "g1", 2);
+    let started = Instant::now();
+    let output = guest
+        .lmx(&[
+            "status",
+            "--wait",
+            "converged",
+            "-g",
+            "g1",
+            "--timeout",
+            "60s",
+            "--json",
+        ])
+        .output()
+        .expect("run lmx");
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert!(
+        started.elapsed() < Duration::from_secs(30),
+        "the wait ended well before its timeout"
+    );
+    let error = &answer(&output)["error"];
+    assert_eq!(error["code"], "finalize.failed", "{error}");
+    assert!(
+        error["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("boot loader update failed")),
+        "{error}"
+    );
+    assert_eq!(
+        error["details"]["conditions"][0]["type"], "FinalizeFailed",
+        "{error}"
+    );
+
+    let status = guest.lmx(&["status", "--json"]).output().expect("run lmx");
+    let conditions = &answer(&status)["data"]["owner"]["conditions"];
+    assert_eq!(conditions[0]["type"], "FinalizeFailed", "{conditions}");
 }
 
 #[test]

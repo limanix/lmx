@@ -24,6 +24,7 @@ A host decodes an answer in this order:
 1. Read `contract`. If the version is unknown, stop: the rest cannot be decoded.
 1. Read `ok`. An answer with `ok: true` and no `data`, or with `ok: false` and no `error`, is a protocol error.
 1. Treat an unknown error `code` as a generic failure and show its `message`.
+1. Ignore a condition `type` or an operation `kind` you do not know.
 1. Keep `[]` and `null` apart: an empty list is a fact that was read, and `null` is a fact that was not.
 
 A command that writes no answer, for example after a usage error or a lost connection, has failed.
@@ -54,6 +55,7 @@ A command that writes no answer, for example after a usage error or a lost conne
 | `contract.unsupported`     | The caller requested a contract version this binary does not speak |
 | `system.degraded`          | The booted generation failed its health check                      |
 | `wait.timeout`             | A wait ended before its condition held                             |
+| `finalize.failed`          | The finalize of the booted generation failed; the generation works |
 
 `lmx status` without `--wait`, `lmx version`, `lmx doctor` and `lmx net check` do not use these codes or the exit statuses `3` and `130`.
 Owner operations, `lmx store reserve`, `lmx apply`, `lmx apply cancel` and `lmx status --wait`, use exit status `3` when `lmxd` is unavailable.
@@ -76,16 +78,18 @@ A problem's `fact` names the field that is `null` or incomplete, or is `config` 
 `owner` is `null` with an `owner` problem when `lmxd` does not answer within two seconds; the other facts are still answered.
 Its conditions are computed when it is asked:
 
-| Condition         | When                                                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------------------------------- |
-| `OutOfDate`       | The mounted generation is not built: an apply is needed                                                    |
-| `RestartRequired` | The mounted generation is built but not booted: a restart is needed                                        |
-| `Degraded`        | The mounted generation is booted and failed its last health check; the message gives the reason            |
-| `Converged`       | The mounted generation is booted, healthy and finalized: older generations and their boot entries are gone |
-| `DiskLow`         | Less than the platform minimum of the store disk is free                                                   |
+| Condition         | When                                                                                                                                                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OutOfDate`       | The mounted generation is not built: an apply is needed                                                                                                                                                                |
+| `RestartRequired` | The mounted generation is built but not booted: a restart is needed                                                                                                                                                    |
+| `Degraded`        | The mounted generation is booted and failed its last health check; the message gives the reason                                                                                                                        |
+| `Converged`       | The mounted generation is booted, healthy and finalized: older generations and their boot entries are gone                                                                                                             |
+| `FinalizeFailed`  | The mounted generation is booted and passed its last health check, but its finalize failed: removing the older generations or rewriting their boot entries; the message gives the reason, and `lmxd` tries again later |
+| `DiskLow`         | Less than the platform minimum of the store disk is free                                                                                                                                                               |
 
 Without a mounted generation there is no generation condition.
 A booted generation that is healthy and still keeps older generations has none either: `lmxd` is about to remove them, and a `SystemFinalize` operation shows it.
+When the finalize fails, the generation is `FinalizeFailed` until a later try succeeds; while a try runs there is no generation condition, and a `SystemFinalize` operation shows it.
 An operation's `created_at` is when it was requested, in Unix milliseconds.
 Without the configuration, `ip` and `systemctl` are looked up in `PATH`, so a `config` problem marks a degraded answer.
 
@@ -118,16 +122,20 @@ Examples: [enough room](../contract/v1/store-reserve.json), [disk low](../contra
 
 The host runs it after it restarts the VM into a new generation.
 `lmx` asks `lmxd` every two seconds until it reports `Converged` and the booted generation is `GENERATION`, then answers as `lmx status` does.
+A `FinalizeFailed` of the booted `GENERATION` ends the wait at once with `finalize.failed`: the generation works, and `lmxd` tries the finalize again later.
 A daemon that does not answer yet, as right after the restart, is waited for.
 `--timeout` limits the wait, such as `90s`, `10m` or `1h`; the default is 10 minutes.
 
-| Error code          | When                                                                       |
-| ------------------- | -------------------------------------------------------------------------- |
-| `system.degraded`   | At the timeout, the generation is `Degraded`; the message gives the reason |
-| `wait.timeout`      | At the timeout, the generation is not converged for another reason         |
-| `owner.unavailable` | `lmxd` never answered; exit status `3`                                     |
+| Error code          | When                                                                                                                        |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `finalize.failed`   | The generation is booted and `FinalizeFailed`: answered at once, because the generation works; the message gives the reason |
+| `system.degraded`   | At the timeout, the generation is `Degraded`; the message gives the reason                                                  |
+| `wait.timeout`      | At the timeout, the generation is not converged for another reason                                                          |
+| `owner.unavailable` | `lmxd` never answered; exit status `3`                                                                                      |
 
-`details` of `system.degraded` and `wait.timeout` has `conditions`, the conditions `lmxd` reported last.
+`details` of `finalize.failed`, `system.degraded` and `wait.timeout` has `conditions`, the conditions `lmxd` reported last.
+
+Example: [finalize failed](../contract/v1/wait-finalize-failed.json).
 
 ## `lmx apply -g GENERATION`
 
@@ -229,7 +237,8 @@ Example: [version](../contract/v1/version.json).
 - Adding an optional field, a new command or a new error code is compatible and keeps the version.
   Hosts treat an unknown code as a generic failure.
 - A new `event` of `lmx apply --follow` is compatible too: hosts skip events they do not know.
-  A new phase or state needs a new contract version.
+  A new `phase` or `state` of `lmx apply` needs a new contract version.
+- A new condition `type` or operation `kind` is compatible: hosts ignore the ones they do not know, and a condition's `message` is for people.
 - Renaming, removing or changing the meaning of a field needs a new contract version.
 - Every version keeps its examples in `contract/v<version>/`; tests decode and re-encode them without loss.
 - The LimaNix client pins an `lmx` release and tests its decoders against that release's examples.

@@ -1,0 +1,16 @@
+{
+  "contract": 1,
+  "ok": false,
+  "error": {
+    "code": "finalize.failed",
+    "message": "Finalizing generation 0123456789ab failed: boot loader update failed; lmxd tries again later.",
+    "details": {
+      "conditions": [
+        {
+          "type": "FinalizeFailed",
+          "message": "Finalizing generation 0123456789ab failed: boot loader update failed; lmxd tries again later."
+        }
+      ]
+    }
+  }
+}

@@ -4,7 +4,8 @@
 //! generation works, then finalizes it: the older generations of the system profile are removed and
 //! the boot entries rewritten, as the host's prune did after its ready check. A generation that fails
 //! its check is `Degraded` and keeps the older generations for a rollback; it is checked again every
-//! minute. The check judges an update; once the generation is finalized and healthy, it stops.
+//! minute. A finalize that fails is `FinalizeFailed`: the generation works, and the finalize is tried
+//! again later. The check judges an update; once the generation is finalized and healthy, it stops.
 
 use std::{
     sync::{
@@ -14,7 +15,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use lmx_model::{CONVERGED, Condition, DEGRADED, Generations, OUT_OF_DATE, RESTART_REQUIRED};
+use lmx_model::{
+    CONVERGED, Condition, DEGRADED, FINALIZE_FAILED, Generations, OUT_OF_DATE, RESTART_REQUIRED,
+};
 use solti::{
     core::SupervisorApi,
     model::{AdmissionPolicy, ModelResult, TaskWorkload},
@@ -35,8 +38,9 @@ const HEALTH_SLOT: &str = "health";
 /// Longest a health check may run; a check that hangs, such as on a stuck mount, fails.
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 
-/// Longest a finalize may run.
-const FINALIZE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+/// Longest a finalize may run: well within the 10 minutes the host waits after a restart, so a stuck
+/// finalize is reported as failed before that wait ends.
+const FINALIZE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 /// When the observer looks at the generations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -74,14 +78,19 @@ pub(crate) enum Health {
 }
 
 /// Where the finalize of the booted generation stands.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Finalize {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Finalize {
     /// None runs, and none failed.
     Idle,
     /// A finalize runs; the boot entries may still list removed generations.
     Running,
-    /// The last finalize failed; it may run again from the instant given.
-    Failed(Instant),
+    /// The last finalize failed.
+    Failed {
+        /// When it may run again.
+        retry: Instant,
+        /// The last line it printed, or why it ended.
+        reason: String,
+    },
 }
 
 /// Watches the booted generation.
@@ -139,18 +148,16 @@ impl Observer {
     }
 
     /// Where the finalize stands.
-    fn finalize(&self) -> Finalize {
-        *self.finalize.lock().unwrap_or_else(PoisonError::into_inner)
+    pub(crate) fn finalize(&self) -> Finalize {
+        self.finalize
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     /// Records where the finalize stands.
     fn set_finalize(&self, finalize: Finalize) {
         *self.finalize.lock().unwrap_or_else(PoisonError::into_inner) = finalize;
-    }
-
-    /// Whether a finalize runs or waits to be tried again, so the generation is not converged.
-    pub(crate) fn finalizing(&self) -> bool {
-        self.finalize() != Finalize::Idle
     }
 
     /// One look: check a settled generation that is not finalized, and finalize it when healthy.
@@ -170,7 +177,7 @@ impl Observer {
                 return;
             }
         };
-        let Step::Check { finalize } = step(kept, &self.health(), self.finalize(), Instant::now())
+        let Step::Check { finalize } = step(kept, &self.health(), &self.finalize(), Instant::now())
         else {
             return;
         };
@@ -213,7 +220,10 @@ impl Observer {
                     reason,
                     "finalizing generation {generation} failed: {reason}"
                 );
-                self.set_finalize(Finalize::Failed(Instant::now() + retry));
+                self.set_finalize(Finalize::Failed {
+                    retry: Instant::now() + retry,
+                    reason,
+                });
             }
         }
     }
@@ -321,11 +331,11 @@ enum Step {
 ///
 /// A failed finalize runs again once its back-off ends, even when it removed the older generations
 /// before it failed, so the boot entries are rewritten.
-fn step(kept: usize, health: &Health, finalize: Finalize, now: Instant) -> Step {
+fn step(kept: usize, health: &Health, finalize: &Finalize, now: Instant) -> Step {
     match finalize {
         Finalize::Running => Step::Rest,
-        Finalize::Failed(at) if now < at => Step::Rest,
-        Finalize::Failed(_) => Step::Check { finalize: true },
+        Finalize::Failed { retry, .. } if now < *retry => Step::Rest,
+        Finalize::Failed { .. } => Step::Check { finalize: true },
         Finalize::Idle if kept > 1 => Step::Check { finalize: true },
         Finalize::Idle if *health == Health::Healthy => Step::Rest,
         Finalize::Idle => Step::Check { finalize: false },
@@ -341,12 +351,12 @@ fn settled(generations: &Generations) -> Option<&str> {
 }
 
 /// Conditions of the generations, given the system profile's generation count, the last health
-/// check, and whether a finalize runs or waits to be tried again.
+/// check, and where the finalize stands.
 pub(crate) fn conditions(
     generations: &Generations,
     kept: Option<usize>,
     health: &Health,
-    finalizing: bool,
+    finalize: &Finalize,
 ) -> Vec<Condition> {
     let Some(desired) = generations.desired.as_deref() else {
         return Vec::new();
@@ -367,16 +377,23 @@ pub(crate) fn conditions(
             format!("Generation {desired} is built; restart the VM to boot it."),
         )];
     }
-    match health {
-        Health::Unhealthy(reason) => vec![condition(
+    match (health, finalize) {
+        (Health::Unhealthy(reason), _) => vec![condition(
             DEGRADED,
             format!("Generation {desired} is booted but unhealthy: {reason}"),
         )],
-        Health::Healthy if kept == Some(1) && !finalizing => vec![condition(
+        (Health::Healthy, Finalize::Failed { reason, .. }) => vec![condition(
+            FINALIZE_FAILED,
+            format!(
+                "Finalizing generation {desired} failed: {}; lmxd tries again later.",
+                reason.trim_end_matches('.')
+            ),
+        )],
+        (Health::Healthy, Finalize::Idle) if kept == Some(1) => vec![condition(
             CONVERGED,
             format!("Generation {desired} is booted, healthy and finalized."),
         )],
-        Health::Healthy | Health::Unknown => Vec::new(),
+        (Health::Healthy, Finalize::Idle | Finalize::Running) | (Health::Unknown, _) => Vec::new(),
     }
 }
 
@@ -405,7 +422,7 @@ mod tests {
 
     /// Kinds of the conditions for `generations`, `kept` and `health`, without a finalize.
     fn kinds(generations: &Generations, kept: Option<usize>, health: &Health) -> Vec<String> {
-        conditions(generations, kept, health, false)
+        conditions(generations, kept, health, &Finalize::Idle)
             .into_iter()
             .map(|condition| condition.kind)
             .collect()
@@ -432,7 +449,12 @@ mod tests {
     #[test]
     fn an_unhealthy_booted_generation_is_degraded() {
         let health = Health::Unhealthy("sshd.service is not active".into());
-        let conditions = conditions(&generations("g2", "g2", "g2"), Some(2), &health, false);
+        let conditions = conditions(
+            &generations("g2", "g2", "g2"),
+            Some(2),
+            &health,
+            &Finalize::Idle,
+        );
         assert_eq!(conditions.len(), 1);
         assert_eq!(conditions[0].kind, DEGRADED);
         assert!(
@@ -445,28 +467,35 @@ mod tests {
     #[test]
     fn finalizes_when_older_generations_are_kept_and_backs_off_after_a_failure() {
         let now = Instant::now();
-        let later = Finalize::Failed(now + Duration::from_secs(60));
-        let due = Finalize::Failed(now);
+        let failed = |retry| Finalize::Failed {
+            retry,
+            reason: "boot loader update failed".into(),
+        };
+        let later = failed(now + Duration::from_secs(60));
+        let due = failed(now);
         let healthy = Health::Healthy;
         let unhealthy = Health::Unhealthy("sshd.service is not active".into());
         let check = |finalize| Step::Check { finalize };
-        assert_eq!(step(2, &Health::Unknown, Finalize::Idle, now), check(true));
-        assert_eq!(step(2, &unhealthy, Finalize::Idle, now), check(true));
+        assert_eq!(step(2, &Health::Unknown, &Finalize::Idle, now), check(true));
+        assert_eq!(step(2, &unhealthy, &Finalize::Idle, now), check(true));
         assert_eq!(
-            step(2, &healthy, later, now),
+            step(2, &healthy, &later, now),
             Step::Rest,
             "waits for the retry"
         );
         assert_eq!(
-            step(1, &healthy, due, now),
+            step(1, &healthy, &due, now),
             check(true),
             "rewrites the boot entries"
         );
-        assert_eq!(step(1, &healthy, Finalize::Running, now), Step::Rest);
-        assert_eq!(step(1, &Health::Unknown, Finalize::Idle, now), check(false));
-        assert_eq!(step(1, &unhealthy, Finalize::Idle, now), check(false));
+        assert_eq!(step(1, &healthy, &Finalize::Running, now), Step::Rest);
         assert_eq!(
-            step(1, &healthy, Finalize::Idle, now),
+            step(1, &Health::Unknown, &Finalize::Idle, now),
+            check(false)
+        );
+        assert_eq!(step(1, &unhealthy, &Finalize::Idle, now), check(false));
+        assert_eq!(
+            step(1, &healthy, &Finalize::Idle, now),
             Step::Rest,
             "converged"
         );
@@ -477,6 +506,34 @@ mod tests {
         assert!(kinds(&generations("", "g1", "g1"), Some(1), &Health::Healthy).is_empty());
         assert!(kinds(&generations("g1", "g1", "g1"), Some(1), &Health::Unknown).is_empty());
         let settled = generations("g1", "g1", "g1");
-        assert!(conditions(&settled, Some(1), &Health::Healthy, true).is_empty());
+        assert!(conditions(&settled, Some(1), &Health::Healthy, &Finalize::Running).is_empty());
+    }
+
+    #[test]
+    fn a_failed_finalize_of_a_healthy_generation_is_reported() {
+        let settled = generations("g1", "g1", "g1");
+        let failed = Finalize::Failed {
+            retry: Instant::now(),
+            reason: "boot loader update failed".into(),
+        };
+        let conditions = conditions(&settled, Some(1), &Health::Healthy, &failed);
+        assert_eq!(conditions.len(), 1);
+        assert_eq!(conditions[0].kind, FINALIZE_FAILED);
+        assert!(conditions[0].message.contains("boot loader update failed"));
+        let unhealthy = Health::Unhealthy("sshd.service is not active".into());
+        assert_eq!(kinds_with(&settled, &unhealthy, &failed), [DEGRADED]);
+        let built = generations("g2", "g2", "g1");
+        assert_eq!(
+            kinds_with(&built, &Health::Healthy, &failed),
+            [RESTART_REQUIRED]
+        );
+    }
+
+    /// Kinds of the conditions of a settled generation with one profile generation.
+    fn kinds_with(generations: &Generations, health: &Health, finalize: &Finalize) -> Vec<String> {
+        conditions(generations, Some(1), health, finalize)
+            .into_iter()
+            .map(|condition| condition.kind)
+            .collect()
     }
 }

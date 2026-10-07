@@ -537,7 +537,7 @@ dependencies = [
 
 [[package]]
 name = "lmx"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "base64 0.23.1",
  "clap",
@@ -555,7 +555,7 @@ dependencies = [
 
 [[package]]
 name = "lmx-facts"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "lmx-model",
  "rustix",
@@ -567,7 +567,7 @@ dependencies = [
 
 [[package]]
 name = "lmx-ipc"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "hyper-util",
  "lmx-model",
@@ -583,7 +583,7 @@ dependencies = [
 
 [[package]]
 name = "lmx-model"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -592,7 +592,7 @@ dependencies = [
 
 [[package]]
 name = "lmxd"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap",
  "listenfd",

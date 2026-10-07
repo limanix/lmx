@@ -98,7 +98,7 @@ pub struct Problem {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CONTRACT_VERSION, DiskUsage, Envelope, Status};
+    use crate::{CONTRACT_VERSION, DiskUsage, Envelope, ErrorCode, FINALIZE_FAILED, Status};
 
     /// Usage with `free_bytes` of 1000 bytes and `free_inodes` of 1000 inodes.
     fn usage(free_bytes: u64, free_inodes: u64) -> DiskUsage {
@@ -150,5 +150,17 @@ mod tests {
             assert!(envelope.ok && envelope.data.is_some() && envelope.error.is_none());
             assert_eq!(serde_json::to_value(&envelope).expect("encode"), original);
         }
+    }
+
+    /// The published answer of a wait that a failed finalize ended decodes and encodes without loss.
+    #[test]
+    fn the_failed_finalize_example_round_trips() {
+        let example = include_str!("../../../contract/v1/wait-finalize-failed.json");
+        let original: serde_json::Value = serde_json::from_str(example).expect("example is JSON");
+        let envelope: Envelope<Status> = serde_json::from_str(example).expect("example decodes");
+        let error = envelope.error.clone().expect("a failure");
+        assert_eq!(error.code, ErrorCode::FinalizeFailed);
+        assert_eq!(error.details["conditions"][0]["type"], FINALIZE_FAILED);
+        assert_eq!(serde_json::to_value(&envelope).expect("encode"), original);
     }
 }

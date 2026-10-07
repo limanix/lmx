@@ -7,8 +7,8 @@ use std::{io, process::ExitCode};
 
 use lmx_facts::{FactError, generations};
 use lmx_model::{
-    CONFIG_PATH, CONVERGED, Check, CheckStatus, DEGRADED, DISK_LOW, Doctor, Envelope, Generations,
-    OUT_OF_DATE, Owner, RESTART_REQUIRED,
+    CONFIG_PATH, CONVERGED, Check, CheckStatus, DEGRADED, DISK_LOW, Doctor, Envelope,
+    FINALIZE_FAILED, Generations, OUT_OF_DATE, Owner, RESTART_REQUIRED,
 };
 
 use crate::{
@@ -95,6 +95,8 @@ fn conditions(
             "See sudo lmx logs health, and the unit the reason names with systemctl status; lmxd \
              checks again every minute.",
         )
+    } else if let Some(message) = holds(FINALIZE_FAILED) {
+        Check::new("generations", CheckStatus::Warning, message).hint("See sudo lmx logs finalize.")
     } else if let Some(message) = holds(RESTART_REQUIRED) {
         Check::new("generations", CheckStatus::Warning, message)
             .hint("Restart the VM from the Mac; limanix update does it.")
@@ -237,6 +239,12 @@ mod tests {
         );
         let checks = conditions(Some(&owner(&[], false)), &settled, None);
         assert_eq!(checks[0].message, "Generation g1 is booted.");
+        let checks = conditions(Some(&owner(&[FINALIZE_FAILED], false)), &settled, None);
+        assert_eq!(checks[0].status, CheckStatus::Warning);
+        assert_eq!(
+            checks[0].hint.as_deref(),
+            Some("See sudo lmx logs finalize.")
+        );
     }
 
     #[test]

@@ -24,7 +24,7 @@ use tonic::{Request, Response, Status};
 use crate::{
     apply::{Applier, Joined, Message},
     auth, launch,
-    observer::{self, Health, Observer},
+    observer::{self, Finalize, Health, Observer},
     paths::Paths,
     store::Store,
     tasks::API_VERSION,
@@ -54,13 +54,13 @@ impl OwnerService {
     fn conditions(&self) -> Vec<Condition> {
         let (generations, _) = lmx_facts::generations::read(&self.paths.generations());
         let kept = lmx_facts::generations::system_generations(&self.paths.profiles()).ok();
-        let (health, finalizing) = self
+        let (health, finalize) = self
             .observer
             .as_ref()
-            .map_or((Health::Unknown, false), |observer| {
-                (observer.health(), observer.finalizing())
+            .map_or((Health::Unknown, Finalize::Idle), |observer| {
+                (observer.health(), observer.finalize())
             });
-        let mut conditions = observer::conditions(&generations, kept, &health, finalizing);
+        let mut conditions = observer::conditions(&generations, kept, &health, &finalize);
         conditions.extend(self.store.conditions());
         conditions
     }

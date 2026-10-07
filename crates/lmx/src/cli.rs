@@ -59,7 +59,8 @@ pub(crate) struct StatusArgs {
     /// Print only what needs attention, such as `restart`, for tmux and the prompt.
     #[arg(long, conflicts_with_all = ["wait", "json"])]
     pub(crate) short: bool,
-    /// Wait until the guest reaches this state, then answer; the host waits so after a restart.
+    /// Wait until the guest reaches this state, then answer; the host waits so after a restart. A
+    /// failed finalize of the generation answers at once.
     #[arg(long, value_enum, requires = "generation")]
     pub(crate) wait: Option<Goal>,
     /// Generation the wait is for.
