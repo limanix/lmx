@@ -3,7 +3,9 @@
 //! After the host restarts the VM into a new generation, `lmxd` checks its health and removes the
 //! older generations. The host waits for that here: `lmx` asks `lmxd` every two seconds until it
 //! reports `Converged` and the booted generation is the one asked for, then answers with the full
-//! status. A daemon that does not answer yet, as right after the restart, is waited for.
+//! status. A daemon that does not answer yet, as right after the restart, is waited for. A failed
+//! finalize ends the wait at once with `finalize.failed`: the generation works, and `lmxd` tries the
+//! finalize again later.
 
 use std::{
     io,
@@ -13,7 +15,9 @@ use std::{
 };
 
 use lmx_facts::generations;
-use lmx_model::{CONVERGED, Condition, DEGRADED, Envelope, ErrorBody, ErrorCode, Owner};
+use lmx_model::{
+    CONVERGED, Condition, DEGRADED, Envelope, ErrorBody, ErrorCode, FINALIZE_FAILED, Owner,
+};
 use serde_json::{Map, Value};
 
 use crate::{
@@ -31,7 +35,8 @@ const POLL: Duration = Duration::from_secs(2);
 
 /// Waits until `generation` is converged, at most `timeout`.
 ///
-/// At the timeout, a `Degraded` generation is `system.degraded`, a daemon that never answered is
+/// A `FinalizeFailed` of the booted `generation` ends the wait at once with `finalize.failed`. At the
+/// timeout, a `Degraded` generation is `system.degraded`, a daemon that never answered is
 /// `owner.unavailable`, and anything else is `wait.timeout` with the last conditions.
 pub(crate) fn converged(
     system: &System,
@@ -48,14 +53,21 @@ pub(crate) fn converged(
         match owner::status(&socket) {
             Ok(answer) => {
                 let (generations, _) = generations::read(&system.generation_paths());
-                if generations.booted.as_deref() == Some(generation) && holds(&answer, CONVERGED) {
-                    let status = status::collect(system);
-                    if json {
-                        output::write_json(&Envelope::success(&status))?;
-                    } else {
-                        output::write_text(&status::render(&status))?;
+                match verdict(&answer, generations.booted.as_deref(), generation) {
+                    Verdict::Converged => {
+                        let status = status::collect(system);
+                        if json {
+                            output::write_json(&Envelope::success(&status))?;
+                        } else {
+                            output::write_text(&status::render(&status))?;
+                        }
+                        return Ok(ExitCode::SUCCESS);
                     }
-                    return Ok(ExitCode::SUCCESS);
+                    Verdict::FinalizeFailed(failed) => {
+                        let error = failure(ErrorCode::FinalizeFailed, &failed.message, &answer);
+                        return report(json, error, &answer);
+                    }
+                    Verdict::Wait => {}
                 }
                 owner = Some(answer);
             }
@@ -73,11 +85,7 @@ pub(crate) fn converged(
     let Some(owner) = owner else {
         return owner::report(unanswered, json);
     };
-    let error = match owner
-        .conditions
-        .iter()
-        .find(|condition| condition.kind == DEGRADED)
-    {
+    let error = match condition(&owner, DEGRADED) {
         Some(degraded) => failure(ErrorCode::SystemDegraded, &degraded.message, &owner),
         None => failure(
             ErrorCode::WaitTimeout,
@@ -88,21 +96,58 @@ pub(crate) fn converged(
             &owner,
         ),
     };
+    report(json, error, &owner)
+}
+
+/// What one answer of `lmxd` means for a wait.
+#[derive(Debug, PartialEq, Eq)]
+enum Verdict<'a> {
+    /// The generation is booted and converged: answer with the status.
+    Converged,
+    /// The generation is booted, but its finalize failed: answer `finalize.failed` at once, because
+    /// the generation works.
+    FinalizeFailed(&'a Condition),
+    /// Ask again.
+    Wait,
+}
+
+/// The verdict on `answer` for a wait for `generation` while `booted` is booted.
+fn verdict<'a>(answer: &'a Owner, booted: Option<&str>, generation: &str) -> Verdict<'a> {
+    if booted != Some(generation) {
+        return Verdict::Wait;
+    }
+    if condition(answer, CONVERGED).is_some() {
+        Verdict::Converged
+    } else if let Some(failed) = condition(answer, FINALIZE_FAILED) {
+        Verdict::FinalizeFailed(failed)
+    } else {
+        Verdict::Wait
+    }
+}
+
+/// The condition `kind` that `owner` reports, if any.
+fn condition<'a>(owner: &'a Owner, kind: &str) -> Option<&'a Condition> {
+    owner
+        .conditions
+        .iter()
+        .find(|condition| condition.kind == kind)
+}
+
+/// Writes `error`, and in text the other conditions `owner` reported, then gives the failure status.
+fn report(json: bool, error: ErrorBody, owner: &Owner) -> io::Result<ExitCode> {
+    let message = error.message.clone();
     let status = output::failure(json, error, output::FAILURE)?;
     if !json {
-        for condition in &owner.conditions {
+        // The error already says what its own condition says.
+        for condition in owner
+            .conditions
+            .iter()
+            .filter(|condition| condition.message != message)
+        {
             eprintln!("{}", condition.message);
         }
     }
     Ok(status)
-}
-
-/// Whether `owner` reports the condition `kind`.
-fn holds(owner: &Owner, kind: &str) -> bool {
-    owner
-        .conditions
-        .iter()
-        .any(|condition| condition.kind == kind)
 }
 
 /// A failure with `code` and `message`, with the conditions `owner` reported last.
@@ -140,6 +185,28 @@ mod tests {
         assert_eq!(span(TIMEOUT), "10 minutes");
         assert_eq!(span(Duration::from_secs(60)), "1 minute");
         assert_eq!(span(Duration::from_secs(90)), "90 seconds");
+    }
+
+    #[test]
+    fn a_failed_finalize_ends_the_wait_only_for_the_booted_generation() {
+        let owner = |kind: &str| Owner {
+            version: "0.0.2".into(),
+            conditions: vec![Condition {
+                kind: kind.into(),
+                message: format!("{kind} message"),
+            }],
+            operations: vec![],
+        };
+        let converged = owner(CONVERGED);
+        let failed = owner(FINALIZE_FAILED);
+        assert_eq!(verdict(&converged, Some("g2"), "g2"), Verdict::Converged);
+        assert_eq!(
+            verdict(&failed, Some("g2"), "g2"),
+            Verdict::FinalizeFailed(&failed.conditions[0])
+        );
+        assert_eq!(verdict(&failed, Some("g1"), "g2"), Verdict::Wait);
+        assert_eq!(verdict(&converged, None, "g2"), Verdict::Wait);
+        assert_eq!(verdict(&owner(DEGRADED), Some("g2"), "g2"), Verdict::Wait);
     }
 
     #[test]

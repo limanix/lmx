@@ -44,7 +44,7 @@ person ───────► lmx <command>              ──► text for pe
 
 Add `--json` to `status`, `doctor`, `net check`, `version`, `store reserve`, `apply` and `apply cancel` to answer with the [host contract](docs/contract.md).
 `lmx status --short` prints only what needs attention, such as `restart` or `disk-low`, for tmux and the prompt.
-`lmx status --wait converged -g G` answers once `lmxd` reports generation G booted, healthy and finalized.
+`lmx status --wait converged -g G` answers once `lmxd` reports generation G booted, healthy and finalized; when the finalize fails, it answers `finalize.failed` at once, because the generation works.
 `lmx status` reads every fact independently: an unreadable fact is reported as a problem, and the others are still answered.
 
 Started under the name `pbcopy`, `pbpaste` or `limanix-session`, the binary keeps the arguments, messages and exit statuses of the shell command it replaces.

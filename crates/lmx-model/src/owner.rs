@@ -39,6 +39,11 @@ pub const CONVERGED: &str = "Converged";
 /// Name of the condition set while the booted generation fails its health check.
 pub const DEGRADED: &str = "Degraded";
 
+/// Name of the condition set after the finalize of a healthy booted generation failed, until a later
+/// try succeeds: removing the older generations or rewriting the boot entries. The generation works;
+/// `lmxd` tries again later.
+pub const FINALIZE_FAILED: &str = "FinalizeFailed";
+
 /// One operation of `lmxd`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Operation {

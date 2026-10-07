@@ -97,6 +97,8 @@ pub enum ErrorCode {
     SystemDegraded,
     /// A wait ended before its condition held.
     WaitTimeout,
+    /// The finalize of the booted generation failed; the booted generation stays usable.
+    FinalizeFailed,
     /// A code this binary does not know, as received.
     Other(String),
 }
@@ -118,6 +120,7 @@ impl ErrorCode {
             Self::ContractUnsupported => "contract.unsupported",
             Self::SystemDegraded => "system.degraded",
             Self::WaitTimeout => "wait.timeout",
+            Self::FinalizeFailed => "finalize.failed",
             Self::Other(code) => code,
         }
     }
@@ -138,6 +141,7 @@ impl ErrorCode {
             "contract.unsupported" => Self::ContractUnsupported,
             "system.degraded" => Self::SystemDegraded,
             "wait.timeout" => Self::WaitTimeout,
+            "finalize.failed" => Self::FinalizeFailed,
             other => Self::Other(other.to_owned()),
         }
     }
@@ -224,6 +228,7 @@ mod tests {
             (ErrorCode::ContractUnsupported, "contract.unsupported"),
             (ErrorCode::SystemDegraded, "system.degraded"),
             (ErrorCode::WaitTimeout, "wait.timeout"),
+            (ErrorCode::FinalizeFailed, "finalize.failed"),
         ] {
             assert_eq!(serde_json::to_value(&code).expect("serialize"), name);
             assert_eq!(

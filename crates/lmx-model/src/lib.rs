@@ -44,7 +44,8 @@ pub use config::{
 };
 pub use contract::{CONTRACT_VERSION, Envelope, ErrorBody, ErrorCode};
 pub use owner::{
-    CONVERGED, Condition, DEGRADED, DISK_LOW, OUT_OF_DATE, Operation, Owner, RESTART_REQUIRED,
+    CONVERGED, Condition, DEGRADED, DISK_LOW, FINALIZE_FAILED, OUT_OF_DATE, Operation, Owner,
+    RESTART_REQUIRED,
 };
 pub use status::{DiskUsage, Generations, Interface, Problem, Status};
 pub use store::{Reserve, Shortage};

@@ -8,7 +8,8 @@ use std::{io, process::ExitCode, time::Duration};
 
 use lmx_facts::{FactError, disk, generations, network, units};
 use lmx_model::{
-    DEGRADED, DISK_LOW, Envelope, OUT_OF_DATE, Owner, Problem, RESTART_REQUIRED, Status,
+    DEGRADED, DISK_LOW, Envelope, FINALIZE_FAILED, OUT_OF_DATE, Owner, Problem, RESTART_REQUIRED,
+    Status,
 };
 
 use crate::{
@@ -60,6 +61,9 @@ fn short(owner: &Owner) -> Vec<&'static str> {
     let mut words = Vec::new();
     if holds(DEGRADED) {
         words.push("degraded");
+    }
+    if holds(FINALIZE_FAILED) {
+        words.push("finalize");
     }
     if holds(DISK_LOW) {
         words.push("disk-low");
@@ -291,6 +295,7 @@ mod tests {
         );
         assert_eq!(short(&owner(&[OUT_OF_DATE], false)), ["apply"]);
         assert_eq!(short(&owner(&[OUT_OF_DATE], true)), ["applying"]);
+        assert_eq!(short(&owner(&[FINALIZE_FAILED], false)), ["finalize"]);
     }
 
     #[test]
