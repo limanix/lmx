@@ -8,7 +8,7 @@
 It reports what the guest really is and answers the LimaNix host with versioned JSON over management SSH.
 Its daemon, `lmxd`, owns the work that must not depend on a caller's session: room in the Nix store, and updates of the system from build to finalize.
 
-[The problem](#the-problem) · [Commands](#commands) · [Host contract](docs/contract.md) · [Contributor map](ARCHITECTURE.md) · [Design](docs/plans/2026-10-06-guest-owner-design.md)
+[The problem](#the-problem) · [Commands](#commands) · [Host contract](docs/contract.md) · [Contributor map](ARCHITECTURE.md)
 
 ## The problem
 
@@ -79,8 +79,6 @@ Reference units are in [`packaging/systemd/`](packaging/systemd).
 
 Requirements: [Task](https://taskfile.dev/docs/installation) 3.53.1+, Git and Docker.
 Tasks run Cargo in the [`ci/rust`](https://github.com/mr-chelyshkin/images) image, so CI and local checks use one toolchain.
-Until Solti 0.0.7 is published, `lmxd` takes Solti from a local checkout by path (see `Cargo.toml`).
-The tasks do not mount that checkout: run Cargo on the host, or mount it into the image at the same path, as the verification of the [M2 plan](docs/plans/2026-10-07-m2-lmxd-store.md) does.
 
 | Task                   | Does                                                      |
 | ---------------------- | --------------------------------------------------------- |

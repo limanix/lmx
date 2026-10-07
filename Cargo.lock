@@ -537,7 +537,7 @@ dependencies = [
 
 [[package]]
 name = "lmx"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "base64 0.23.1",
  "clap",
@@ -555,7 +555,7 @@ dependencies = [
 
 [[package]]
 name = "lmx-facts"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "lmx-model",
  "rustix",
@@ -567,7 +567,7 @@ dependencies = [
 
 [[package]]
 name = "lmx-ipc"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "hyper-util",
  "lmx-model",
@@ -583,7 +583,7 @@ dependencies = [
 
 [[package]]
 name = "lmx-model"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -592,7 +592,7 @@ dependencies = [
 
 [[package]]
 name = "lmxd"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "clap",
  "listenfd",
@@ -1108,6 +1108,8 @@ dependencies = [
 [[package]]
 name = "solti"
 version = "0.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58cb6388d35471ade7faa67e5fae018b66d1ca1db0ba3cd4ed7170ed915acfb8"
 dependencies = [
  "solti-api",
  "solti-core",
@@ -1121,6 +1123,8 @@ dependencies = [
 [[package]]
 name = "solti-api"
 version = "0.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e92f8eca2127abc1b2abefc1686cfaa80895e922ed2f4344dd9be5523156c16"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -1142,6 +1146,8 @@ dependencies = [
 [[package]]
 name = "solti-core"
 version = "0.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31dc57d7b1474228f216adcd650c41ca39a77064d4b638051cc8ef765ef961ac"
 dependencies = [
  "bytes",
  "parking_lot",
@@ -1159,6 +1165,8 @@ dependencies = [
 [[package]]
 name = "solti-exec"
 version = "0.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40c1ef3c11332c7a9ed264ac1d172d5aff6a6c4b8b4eb32bfd1d2f4f5164ab50"
 dependencies = [
  "bytes",
  "libc",
@@ -1174,6 +1182,8 @@ dependencies = [
 [[package]]
 name = "solti-model"
 version = "0.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e00bc16c2ff42bf8e89752d7023fedf83363a93aa89a96ae537ed72966226e7f"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -1188,6 +1198,8 @@ dependencies = [
 [[package]]
 name = "solti-observe"
 version = "0.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6152c1599f28b03f515c427bd1d6c887120c624a31554d5a154a0b4457aead39"
 dependencies = [
  "serde",
  "thiserror",
@@ -1200,6 +1212,8 @@ dependencies = [
 [[package]]
 name = "solti-runner"
 version = "0.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94a91d648480233667481bb18d15bceb9c68f24db5f19ccfe641663e3aa21d5e"
 dependencies = [
  "async-trait",
  "bytes",

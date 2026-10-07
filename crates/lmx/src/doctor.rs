@@ -263,7 +263,7 @@ mod tests {
     #[test]
     fn a_daemon_of_another_version_is_a_warning() {
         let mut other = owner(&[], false);
-        other.version = "0.0.1".into();
+        other.version = format!("{}-other", env!("CARGO_PKG_VERSION"));
         assert_eq!(owner_check(&Ok(other)).status, CheckStatus::Warning);
         let unreachable = CallError::Unavailable("lmxd is not reachable".into());
         assert_eq!(owner_check(&Err(unreachable)).status, CheckStatus::Failed);

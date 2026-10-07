@@ -4,7 +4,6 @@ This document is the entry point for contributors and reviewers.
 It explains what each crate owns, how the crates connect, and where to begin a change.
 
 For usage, start with the [README](README.md) and the [host contract](docs/contract.md).
-The [design](docs/plans/2026-10-06-guest-owner-design.md) records why the guest owner exists and what comes next.
 Exact contracts live in the Rust source and its module-level documentation.
 
 ## Architecture at a glance
