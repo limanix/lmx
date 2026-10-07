@@ -102,8 +102,10 @@ fn logging() {
     } else {
         LoggerFormat::Text
     };
+    // Journal fields keep their names, such as `LMX_TASK`, so `lmx logs` and people filter by them.
     if let Err(error) = init_logger(&LoggerConfig {
         format,
+        journald_field_prefix: None,
         ..LoggerConfig::default()
     }) {
         eprintln!("lmxd: logging is unavailable: {error}");

@@ -8,6 +8,7 @@
 //! packaging error rather than a compatibility case.
 
 use std::{
+    collections::BTreeMap,
     fs, io,
     path::{Path, PathBuf},
 };
@@ -38,6 +39,10 @@ pub struct Config {
     pub disk: DiskPolicy,
     /// Health check of an applied generation.
     pub health: Health,
+    /// Network declaration of the guest.
+    pub network: Network,
+    /// Colors of the guest, chosen in the declaration.
+    pub theme: Theme,
     /// Named-session provider selected by catalog modules.
     pub session: Session,
     /// Absolute paths of the system tools the binaries run.
@@ -120,6 +125,8 @@ pub struct Tools {
     /// `systemd-run`, used to run `switch-to-configuration` in its own unit, so stopping `lmxd`
     /// never interrupts a boot loader update.
     pub systemd_run: String,
+    /// `journalctl`, used to read the history of `lmxd` tasks.
+    pub journalctl: String,
 }
 
 /// Health check of an applied generation.
@@ -128,6 +135,35 @@ pub struct Tools {
 pub struct Health {
     /// Platform units that must be active, such as `sshd.service`.
     pub units: Vec<String>,
+}
+
+/// Network declaration of the guest.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Network {
+    /// Ports the guest firewall opens, as NixOS evaluated `networking.firewall`: those of
+    /// `network.ports` in `limanix.toml` and those that modules open.
+    pub ports: Ports,
+}
+
+/// Ports the guest firewall opens.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Ports {
+    /// Open TCP ports.
+    pub tcp: Vec<u16>,
+    /// Open UDP ports.
+    pub udp: Vec<u16>,
+}
+
+/// Colors of the guest, chosen in the declaration.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Theme {
+    /// Catppuccin flavor, such as `mocha`.
+    pub flavor: String,
+    /// The flavor's colors by name, such as `blue`, as `#rrggbb`.
+    pub palette: BTreeMap<String, String>,
 }
 
 /// Failure to obtain a usable configuration.
@@ -189,7 +225,7 @@ mod tests {
     use super::*;
 
     /// Configuration as the platform renders it for schema 1.
-    const SAMPLE: &str = r#"{
+    const SAMPLE: &str = r##"{
         "schema": 1,
         "vm": {"name": "dev-box", "arch": "arm64", "system": "NixOS 26.05"},
         "generation": "0123456789ab",
@@ -197,6 +233,8 @@ mod tests {
         "modules": ["lmx:console", "lmx:go"],
         "disk": {"collect_percent": 20, "minimum_percent": 10},
         "health": {"units": ["sshd.service", "lmx.socket"]},
+        "network": {"ports": {"tcp": [8080], "udp": []}},
+        "theme": {"flavor": "mocha", "palette": {"blue": "#89b4fa", "red": "#f38ba8"}},
         "session": {"command": null, "providers": ["lmx:tmux"]},
         "tools": {
             "ip": "/run/current-system/sw/bin/ip",
@@ -209,9 +247,10 @@ mod tests {
             "nix_env": "/run/current-system/sw/bin/nix-env",
             "sudo": "/run/wrappers/bin/sudo",
             "bash": "/run/current-system/sw/bin/bash",
-            "systemd_run": "/run/current-system/sw/bin/systemd-run"
+            "systemd_run": "/run/current-system/sw/bin/systemd-run",
+            "journalctl": "/run/current-system/sw/bin/journalctl"
         }
-    }"#;
+    }"##;
 
     #[test]
     fn parses_the_platform_configuration() {
@@ -220,6 +259,8 @@ mod tests {
         assert_eq!(config.generation, "0123456789ab");
         assert_eq!(config.user.uid, 501);
         assert_eq!(config.disk.minimum_percent, 10);
+        assert_eq!(config.network.ports.tcp, [8080]);
+        assert_eq!(config.theme.palette["blue"], "#89b4fa");
         assert_eq!(config.session.command, None);
     }
 

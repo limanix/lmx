@@ -13,6 +13,8 @@
 //! | [`machine`]     | processors, memory and kernel           | the scheduler, `/proc/meminfo`, `uname` |
 //! | [`mounts`]      | shared folders and their mode           | `/proc/self/mountinfo`                  |
 //! | [`network`]     | interfaces and global IPv4 addresses    | `ip -j address show`                    |
+//! | [`sockets`]     | listening sockets and their processes   | `/proc/net`, `/proc/<pid>/fd`           |
+//! | [`journal`]     | records of `lmxd` tasks                 | `journalctl -o json`                    |
 //! | [`units`]       | failed systemd units                    | `systemctl list-units --state=failed`   |
 //!
 //! Readers that run a program take its path from the caller: an absolute path from the platform
@@ -24,9 +26,11 @@ mod command;
 pub mod disk;
 mod error;
 pub mod generations;
+pub mod journal;
 pub mod machine;
 pub mod mounts;
 pub mod network;
+pub mod sockets;
 pub mod units;
 
 pub use error::FactError;

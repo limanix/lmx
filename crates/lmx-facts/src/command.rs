@@ -2,7 +2,7 @@
 
 use std::{
     path::Path,
-    process::{Command, Stdio},
+    process::{Command, Output, Stdio},
     sync::mpsc,
     thread,
     time::Duration,
@@ -27,11 +27,31 @@ pub(crate) fn output(program: &Path, args: &[&str]) -> Result<Vec<u8>, FactError
     output_within(program, args, TIMEOUT)
 }
 
+/// Runs `program` like [`output`], waiting at most `timeout`; also returns its standard error, where
+/// some tools explain an incomplete answer.
+pub(crate) fn output_and_errors(
+    program: &Path,
+    args: &[&str],
+    timeout: Duration,
+) -> Result<(Vec<u8>, String), FactError> {
+    run(program, args, timeout).map(|output| {
+        (
+            output.stdout,
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
+    })
+}
+
 /// Runs `program` like [`output`], waiting at most `timeout`.
+fn output_within(program: &Path, args: &[&str], timeout: Duration) -> Result<Vec<u8>, FactError> {
+    run(program, args, timeout).map(|output| output.stdout)
+}
+
+/// Runs `program` with `args`, waiting at most `timeout`; a failure is [`FactError::Command`].
 ///
 /// A tool that is still running is left to finish on its own instead of being killed: `systemctl`
 /// gives up on D-Bus after 25 seconds, and a tool that writes after `lmx` has exited gets `SIGPIPE`.
-fn output_within(program: &Path, args: &[&str], timeout: Duration) -> Result<Vec<u8>, FactError> {
+fn run(program: &Path, args: &[&str], timeout: Duration) -> Result<Output, FactError> {
     let spawn_error = |source| FactError::Spawn {
         program: program.display().to_string(),
         source,
@@ -64,7 +84,7 @@ fn output_within(program: &Path, args: &[&str], timeout: Duration) -> Result<Vec
         });
     }
 
-    Ok(output.stdout)
+    Ok(output)
 }
 
 #[cfg(test)]

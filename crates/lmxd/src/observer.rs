@@ -175,7 +175,7 @@ impl Observer {
             return;
         };
 
-        let health = self.check().await;
+        let health = self.check(&generation).await;
         let healthy = health == Health::Healthy;
         self.set_health(health);
         if !(healthy && finalize) {
@@ -187,9 +187,19 @@ impl Observer {
             return;
         }
         self.set_finalize(Finalize::Running);
-        match self.run(Kind::SystemFinalize, tasks::finalize()).await {
+        let task = self.name(Kind::SystemFinalize);
+        let kind = Kind::SystemFinalize.name();
+        match self
+            .run(&task, Kind::SystemFinalize, tasks::finalize())
+            .await
+        {
             Ok(()) => {
-                tracing::info!(generation, "finalized the booted generation");
+                tracing::info!(
+                    lmx_task = task,
+                    lmx_kind = kind,
+                    lmx_generation = generation,
+                    "finalized generation {generation}"
+                );
                 self.set_finalize(Finalize::Idle);
                 if let Err(error) = self.store.collect(Priority::Idle).await {
                     tracing::warn!(%error, "Collecting unreferenced store paths failed.");
@@ -197,24 +207,44 @@ impl Observer {
             }
             Err(reason) => {
                 tracing::warn!(
-                    generation,
+                    lmx_task = task,
+                    lmx_kind = kind,
+                    lmx_generation = generation,
                     reason,
-                    "finalizing the booted generation failed"
+                    "finalizing generation {generation} failed: {reason}"
                 );
                 self.set_finalize(Finalize::Failed(Instant::now() + retry));
             }
         }
     }
 
-    /// Checks the booted generation: the mounts in process, then the health task.
-    async fn check(&self) -> Health {
-        if let Err(reason) = self.mounts() {
-            return Health::Unhealthy(reason);
-        }
-        match self.run(Kind::SystemHealth, tasks::health()).await {
-            Ok(()) => Health::Healthy,
+    /// Checks the booted `generation`: the mounts in process, then the health task.
+    ///
+    /// A failed check is logged under the check's task name, also when it failed before the task.
+    async fn check(&self, generation: &str) -> Health {
+        let task = self.name(Kind::SystemHealth);
+        let health = match self.mounts() {
             Err(reason) => Health::Unhealthy(reason),
+            Ok(()) => match self.run(&task, Kind::SystemHealth, tasks::health()).await {
+                Ok(()) => Health::Healthy,
+                Err(reason) => Health::Unhealthy(reason),
+            },
+        };
+        if let Health::Unhealthy(reason) = &health {
+            tracing::warn!(
+                lmx_task = task,
+                lmx_kind = Kind::SystemHealth.name(),
+                lmx_generation = generation,
+                "generation {generation} is unhealthy: {reason}"
+            );
         }
+        health
+    }
+
+    /// A new task name of `kind`, such as `system-health-3`.
+    fn name(&self, kind: Kind) -> String {
+        let number = self.created.fetch_add(1, Ordering::Relaxed) + 1;
+        format!("{}-{number}", kind.task_prefix())
     }
 
     /// Whether the generation inputs and the development account's home are mounted.
@@ -229,12 +259,15 @@ impl Observer {
         Ok(())
     }
 
-    /// Runs a task of `kind` once and waits; a failure gives the last line it printed, or why it
-    /// ended.
-    async fn run(&self, kind: Kind, workload: ModelResult<TaskWorkload>) -> Result<(), String> {
-        let number = self.created.fetch_add(1, Ordering::Relaxed) + 1;
-        let name = format!("{}-{number}", kind.task_prefix());
-        let mut lines = self.capture.listen(&name);
+    /// Runs the task `name` of `kind` once and waits; a failure gives the last line it printed, or
+    /// why it ended.
+    async fn run(
+        &self,
+        name: &str,
+        kind: Kind,
+        workload: ModelResult<TaskWorkload>,
+    ) -> Result<(), String> {
+        let mut lines = self.capture.listen(name);
         // A finalize never waits behind a build in the system slot: after the build, the older
         // generations would include the booted one. A dropped finalize is tried again later.
         let placement = match kind {
@@ -250,17 +283,17 @@ impl Observer {
             },
         };
         let started = match workload {
-            Ok(workload) => launch::start(&self.supervisor, &name, workload, placement).await,
+            Ok(workload) => launch::start(&self.supervisor, name, workload, placement).await,
             Err(error) => Err(error.to_string()),
         };
         let result = match started {
             Ok(task) => launch::finished(&self.supervisor, &task).await,
             Err(error) => {
-                self.capture.forget(&name);
+                self.capture.forget(name);
                 return Err(error);
             }
         };
-        self.capture.forget(&name);
+        self.capture.forget(name);
         let mut last = None;
         while let Ok(line) = lines.try_recv() {
             if !line.text.trim().is_empty() {

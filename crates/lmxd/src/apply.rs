@@ -75,6 +75,9 @@ struct Progress {
 pub(crate) struct Run {
     /// The generation being applied.
     generation: String,
+    /// Name of the run and of its build task, such as `system-apply-3`; the journal records of the
+    /// run carry it, also when it fails before the build.
+    name: String,
     /// Followers and outcome.
     progress: SyncMutex<Progress>,
     /// Becomes `true` when the apply is cancelled.
@@ -84,10 +87,11 @@ pub(crate) struct Run {
 }
 
 impl Run {
-    /// A run of `generation` without followers.
-    fn new(generation: &str) -> Self {
+    /// A run of `generation` named `name`, without followers.
+    fn new(generation: &str, name: String) -> Self {
         Self {
             generation: generation.to_owned(),
+            name,
             progress: SyncMutex::new(Progress {
                 messages: broadcast::channel(BACKLOG).0,
                 outcome: None,
@@ -189,7 +193,7 @@ pub(crate) struct Applier {
     paths: Paths,
     /// Group of the installed environment files.
     gid: u32,
-    /// Number of the last build task, for unique task names.
+    /// Number of the last run, for unique task names.
     created: AtomicU64,
     /// The latest apply.
     current: Mutex<Option<Arc<Run>>>,
@@ -235,7 +239,9 @@ impl Applier {
                 Decision::Replace(run) => self.stop(run).await,
                 Decision::Built => return Ok(Joined::Done(Ok(restart_required(generation)))),
                 Decision::Start => {
-                    let run = Arc::new(Run::new(generation));
+                    let number = self.created.fetch_add(1, Ordering::Relaxed) + 1;
+                    let name = format!("{}-{number}", Kind::SystemApply.task_prefix());
+                    let run = Arc::new(Run::new(generation, name));
                     // Join before the run starts, so the follower sees its first phase.
                     let joined = run.join();
                     *current = Some(Arc::clone(&run));
@@ -280,6 +286,18 @@ impl Applier {
 
     /// Runs the steps of `run` and records its outcome.
     async fn drive(self: Arc<Self>, run: Arc<Run>) {
+        // `lmx logs apply` reads these with the build's lines: same task, kind and generation.
+        let (task, kind, generation) = (
+            run.name.as_str(),
+            Kind::SystemApply.name(),
+            run.generation.as_str(),
+        );
+        tracing::info!(
+            lmx_task = task,
+            lmx_kind = kind,
+            lmx_generation = generation,
+            "applying generation {generation}"
+        );
         // The steps run in their own task, so even a panic gives the followers an outcome.
         let steps = tokio::spawn({
             let applier = Arc::clone(&self);
@@ -300,17 +318,26 @@ impl Applier {
             ));
         }
         match &outcome {
-            Ok(_) => tracing::info!(generation = run.generation, "built the generation"),
-            Err(error) if error.code == ErrorCode::ApplyCancelled => {
-                tracing::info!(generation = run.generation, "apply cancelled");
-            }
-            Err(error) => {
-                tracing::warn!(
-                    generation = run.generation,
-                    error = error.message,
-                    "apply failed"
-                );
-            }
+            Ok(_) => tracing::info!(
+                lmx_task = task,
+                lmx_kind = kind,
+                lmx_generation = generation,
+                "built generation {generation}"
+            ),
+            Err(error) if error.code == ErrorCode::ApplyCancelled => tracing::info!(
+                lmx_task = task,
+                lmx_kind = kind,
+                lmx_generation = generation,
+                "apply of generation {generation} cancelled"
+            ),
+            Err(error) => tracing::warn!(
+                lmx_task = task,
+                lmx_kind = kind,
+                lmx_generation = generation,
+                error = error.message,
+                "apply of generation {generation} failed: {}",
+                error.message
+            ),
         }
         run.finish(outcome);
     }
@@ -358,9 +385,8 @@ impl Applier {
         if generations.desired.as_deref() != Some(run.generation.as_str()) {
             return Err(mismatch(&run.generation, generations.desired.as_deref()));
         }
-        let number = self.created.fetch_add(1, Ordering::Relaxed) + 1;
-        let name = format!("{}-{number}", Kind::SystemApply.task_prefix());
-        let mut lines = self.capture.listen(&name);
+        let name = run.name.as_str();
+        let mut lines = self.capture.listen(name);
         // Queued: a finalize in the slot finishes first. A build of another generation was
         // cancelled by the apply that replaced it.
         let placement = Placement {
@@ -369,17 +395,24 @@ impl Applier {
             timeout: Duration::MAX,
         };
         let started = match tasks::apply(&run.generation) {
-            Ok(workload) => launch::start(&self.supervisor, &name, workload, placement).await,
+            Ok(workload) => launch::start(&self.supervisor, name, workload, placement).await,
             Err(error) => Err(error.to_string()),
         };
         let task = started.map_err(|error| {
-            self.capture.forget(&name);
+            self.capture.forget(name);
             failure(
                 ErrorCode::ApplyBuildFailed,
                 format!("The build cannot start: {error}"),
             )
         })?;
         *run.task.lock().unwrap_or_else(PoisonError::into_inner) = Some(task.clone());
+        tracing::info!(
+            lmx_task = name,
+            lmx_kind = Kind::SystemApply.name(),
+            lmx_generation = run.generation,
+            "building generation {}",
+            run.generation
+        );
         // A cancel that came while the task was created did not see it.
         if run.is_cancelled() {
             let _ = self.supervisor.cancel_task(&task).await;
@@ -394,7 +427,7 @@ impl Applier {
                 Some(line) = lines.recv() => full |= forward(run, line),
             }
         };
-        self.capture.forget(&name);
+        self.capture.forget(name);
         while let Ok(line) = lines.try_recv() {
             full |= forward(run, line);
         }
@@ -501,8 +534,8 @@ mod tests {
             built: Some(built.to_owned()),
             booted: Some("g0".to_owned()),
         };
-        let g1 = Arc::new(Run::new("g1"));
-        let g2 = Arc::new(Run::new("g2"));
+        let g1 = Arc::new(Run::new("g1", "system-apply-1".into()));
+        let g2 = Arc::new(Run::new("g2", "system-apply-2".into()));
         let mounted_g2 = generations("g2", "g1");
         assert!(matches!(
             decide("g3", &mounted_g2, None),
@@ -558,7 +591,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_follower_that_joins_first_sees_every_message() {
-        let run = Run::new("g1");
+        let run = Run::new("g1", "system-apply-1".into());
         let Joined::Following(mut messages) = run.join() else {
             panic!("a new run has no outcome");
         };

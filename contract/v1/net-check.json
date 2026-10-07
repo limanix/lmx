@@ -1,0 +1,26 @@
+{
+  "contract": 1,
+  "ok": true,
+  "data": {
+    "port": 8080,
+    "protocol": "tcp",
+    "checks": [
+      {
+        "check": "firewall",
+        "status": "ok",
+        "message": "TCP 8080 is open in the guest firewall."
+      },
+      {
+        "check": "listener",
+        "status": "failed",
+        "message": "TCP 8080 listens on 127.0.0.1 only, so it is reachable only inside the guest.",
+        "hint": "Make the application listen on 0.0.0.0 or the guest address."
+      },
+      {
+        "check": "process",
+        "status": "ok",
+        "message": "python3 (pid 4242) holds the socket of user dev."
+      }
+    ]
+  }
+}

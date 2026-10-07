@@ -189,6 +189,8 @@ impl Guest {
             "modules": [],
             "disk": {"collect_percent": 20, "minimum_percent": 10},
             "health": {"units": ["sshd.service"]},
+            "network": {"ports": {"tcp": [8080], "udp": []}},
+            "theme": {"flavor": "mocha", "palette": {}},
             "session": {"command": null, "providers": []},
             "tools": {
                 "ip": path("bin/ip"),
@@ -201,7 +203,8 @@ impl Guest {
                 "nix_env": path("bin/nix-env"),
                 "sudo": path("bin/sudo"),
                 "bash": path("bin/bash"),
-                "systemd_run": path("bin/systemd-run")
+                "systemd_run": path("bin/systemd-run"),
+                "journalctl": path("bin/journalctl")
             }
         });
         fs::write(path("etc/lmx/config.json"), config.to_string())
@@ -587,4 +590,27 @@ fn a_healthy_booted_generation_is_finalized_and_converges() {
     ] {
         assert!(calls.contains(&call), "{call} missing from {calls:?}");
     }
+}
+
+#[test]
+fn doctor_and_the_short_status_follow_the_conditions_of_lmxd() {
+    let guest = Guest::new(usage(50), usage(50));
+    guest.mount("g2", "g2", "g1", 1);
+    let output = guest.lmx(&["doctor", "--json"]).output().expect("run lmx");
+    assert!(output.status.success(), "warnings do not fail: {output:?}");
+    let checks = &answer(&output)["data"]["checks"];
+    assert_eq!(checks[1]["status"], "ok", "{checks}");
+    assert_eq!(
+        checks[2],
+        json!({
+            "check": "generations",
+            "status": "warning",
+            "message": "Generation g2 is built; restart the VM to boot it.",
+            "hint": "Restart the VM from the Mac; limanix update does it."
+        })
+    );
+
+    let short = guest.lmx(&["status", "--short"]).output().expect("run lmx");
+    assert!(short.status.success(), "{short:?}");
+    assert_eq!(String::from_utf8_lossy(&short.stdout), "restart\n");
 }

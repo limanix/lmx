@@ -19,7 +19,7 @@ use crate::{
     help,
     layout::{columns, wrap},
     output,
-    palette::{self, Color, Paint},
+    palette::{Color, Paint, Palette},
     system::System,
 };
 
@@ -74,7 +74,10 @@ struct Facts {
 /// Runs `lmx welcome`; fails when the shared folders cannot be listed, as the shell welcome did.
 pub(crate) fn run(system: &System) -> io::Result<ExitCode> {
     let facts = collect(system);
-    output::write_text(&render(&facts, Paint::detect()))?;
+    output::write_text(&render(
+        &facts,
+        Paint::detect(Palette::of_config(&system.config)),
+    ))?;
     Ok(output::page_status(facts.mounts.is_some()))
 }
 
@@ -114,8 +117,8 @@ fn render(facts: &Facts, paint: Paint) -> String {
         let (left, right) = line.split_at(LOGO_SPLIT.min(line.len()));
         text.push_str(&format!(
             "  {}{}\n",
-            paint.color(palette::BLUE, left),
-            paint.color(palette::MAUVE, right)
+            paint.color(paint.palette().blue, left),
+            paint.color(paint.palette().mauve, right)
         ));
     }
     text.push('\n');
@@ -149,19 +152,19 @@ fn render(facts: &Facts, paint: Paint) -> String {
 
     text.push_str(&format!(
         "  {}{}{}{}{}{}\n\n",
-        paint.color(palette::BLUE, "lmx help"),
-        paint.color(palette::MUTED, " for commands, "),
-        paint.color(palette::BLUE, "lmx info"),
-        paint.color(palette::MUTED, " for details, "),
-        paint.color(palette::BLUE, "exit"),
-        paint.color(palette::MUTED, " to return to the Mac.")
+        paint.color(paint.palette().blue, "lmx help"),
+        paint.color(paint.palette().muted, " for commands, "),
+        paint.color(paint.palette().blue, "lmx info"),
+        paint.color(paint.palette().muted, " for details, "),
+        paint.color(paint.palette().blue, "exit"),
+        paint.color(paint.palette().muted, " to return to the Mac.")
     ));
     text
 }
 
 /// The label column, muted.
 fn label(paint: Paint, label: &str) -> String {
-    paint.color(palette::MUTED, &format!("{label:<LABEL$}"))
+    paint.color(paint.palette().muted, &format!("{label:<LABEL$}"))
 }
 
 /// Writes `label` and `value`; further lines of the value keep the value column.
@@ -182,11 +185,11 @@ fn vm(text: &mut String, facts: &Facts, paint: Paint) {
             "  {}{} {}\n",
             label(paint, "VM"),
             paint.bold(&facts.name),
-            paint.color(palette::SUBTEXT, &system)
+            paint.color(paint.palette().subtext, &system)
         ));
     } else {
         row(text, paint, "VM", &facts.name, None);
-        row(text, paint, "", &system, Some(palette::SUBTEXT));
+        row(text, paint, "", &system, Some(paint.palette().subtext));
     }
 }
 
@@ -226,9 +229,9 @@ fn shared(text: &mut String, facts: &Facts, paint: Paint) {
     let mut name = "Shared";
     for mount in mounts {
         let (mode, color) = if mount.read_only {
-            ("ro", palette::PEACH)
+            ("ro", paint.palette().peach)
         } else {
-            ("rw", palette::GREEN)
+            ("rw", paint.palette().green)
         };
         for (index, line) in wrap(&mount.target, width).into_iter().enumerate() {
             if index == 0 {
@@ -275,7 +278,10 @@ fn disk_warning(facts: &Facts) -> Option<String> {
 /// Writes a warning in yellow, followed by a blank line.
 fn warn(text: &mut String, paint: Paint, warning: &str) {
     for line in wrap(warning, WARNING) {
-        text.push_str(&format!("  {}\n", paint.color(palette::YELLOW, &line)));
+        text.push_str(&format!(
+            "  {}\n",
+            paint.color(paint.palette().yellow, &line)
+        ));
     }
     text.push('\n');
 }

@@ -9,6 +9,9 @@
 //! | `lmx info`            | facts  | kernel, guest disk, shared folders and failed units         |
 //! | `lmx welcome`         | caller | the summary an interactive shell shows when it starts       |
 //! | `lmx status`          | facts  | generations, disk, interfaces, failed units, and `lmxd`     |
+//! | `lmx doctor`          | facts  | findings about the configuration, `lmxd` and generations    |
+//! | `lmx net check PORT`  | facts  | firewall rule, listener and process of a port               |
+//! | `lmx logs KIND`       | facts  | the latest run of an `lmxd` task kind, from the journal     |
 //! | `lmx version`         | facts  | the binary version and the host contract it speaks          |
 //! | `lmx store reserve`   | owner  | room in the store before the host stops the VM, in `lmxd`   |
 //! | `lmx apply -g G`      | owner  | builds generation G for the next boot, in `lmxd`            |
@@ -20,8 +23,9 @@
 //! Facts are read in the caller's process with the caller's privileges and need no daemon. Owner
 //! operations run only in the guest owner daemon `lmxd`; without it they fail with exit status 3.
 //! `lmx status --wait converged -g G` is one too: it answers once `lmxd` reports generation G
-//! settled after a restart. Caller commands act on the caller's terminal and environment, so only
-//! the caller can run them.
+//! settled after a restart. `lmx status --short` prints only what needs attention, for tmux and the
+//! prompt, and never waits more than 200 ms. Caller commands act on the caller's terminal and
+//! environment, so only the caller can run them.
 //!
 //! ## Other names
 //!
@@ -51,10 +55,14 @@
 mod apply;
 mod cli;
 mod clipboard;
+mod doctor;
+mod findings;
 mod format;
 mod help;
 mod info;
 mod layout;
+mod logs;
+mod net;
 mod output;
 mod owner;
 mod palette;
@@ -76,9 +84,10 @@ use std::{
 };
 
 use clap::Parser;
+use lmx_model::Protocol;
 
 use crate::{
-    cli::{ApplyArgs, ApplyCommand, Cli, ClipboardCommand, Command, StoreCommand},
+    cli::{ApplyArgs, ApplyCommand, Cli, ClipboardCommand, Command, NetCommand, StoreCommand},
     system::System,
 };
 
@@ -128,6 +137,20 @@ fn lmx(mut arguments: Vec<OsString>) -> io::Result<ExitCode> {
         Some(Command::Welcome) => welcome::run(&System::from_environment()),
         Some(Command::Status(args)) => status::run(&System::from_environment(), &args),
         Some(Command::Version(args)) => version::run(&args),
+        Some(Command::Doctor(args)) => doctor::run(&System::from_environment(), &args),
+        Some(Command::Net(NetCommand::Check(args))) => net::check(
+            &System::from_environment(),
+            args.port,
+            if args.udp {
+                Protocol::Udp
+            } else {
+                Protocol::Tcp
+            },
+            args.output.json,
+        ),
+        Some(Command::Logs(args)) => {
+            logs::run(&System::from_environment(), args.kind, args.previous)
+        }
         Some(Command::Store(StoreCommand::Reserve(args))) => {
             store::reserve(&System::from_environment(), &args)
         }

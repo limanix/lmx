@@ -60,6 +60,11 @@ impl fmt::Display for CallError {
 
 /// Asks `lmxd` on `socket` for its state, waiting at most [`STATUS_TIMEOUT`].
 pub(crate) fn status(socket: &Path) -> Result<Owner, CallError> {
+    status_within(socket, STATUS_TIMEOUT)
+}
+
+/// Asks `lmxd` on `socket` for its state, waiting at most `timeout` to connect and get the answer.
+pub(crate) fn status_within(socket: &Path, timeout: Duration) -> Result<Owner, CallError> {
     block_on(async {
         let call = async {
             let mut client = connect(socket).await?;
@@ -69,9 +74,9 @@ pub(crate) fn status(socket: &Path) -> Result<Owner, CallError> {
                 .map_err(|status| CallError::from_status(&status))?;
             Ok(Owner::from(response.into_inner()))
         };
-        tokio::time::timeout(STATUS_TIMEOUT, call)
+        tokio::time::timeout(timeout, call)
             .await
-            .unwrap_or_else(|_| Err(silent(STATUS_TIMEOUT)))
+            .unwrap_or_else(|_| Err(silent(timeout)))
     })
 }
 
@@ -187,10 +192,12 @@ async fn ready(socket: &Path) -> Result<OwnerClient<Channel>, CallError> {
 
 /// Error of a daemon that did not answer within `timeout`.
 fn silent(timeout: Duration) -> CallError {
-    CallError::Unavailable(format!(
-        "lmxd did not answer within {} seconds",
-        timeout.as_secs()
-    ))
+    let span = if timeout.subsec_millis() == 0 {
+        format!("{} seconds", timeout.as_secs())
+    } else {
+        format!("{} ms", timeout.as_millis())
+    };
+    CallError::Unavailable(format!("lmxd did not answer within {span}"))
 }
 
 /// Connects to `lmxd` on `socket`.

@@ -265,6 +265,7 @@ fn check(config: &Config) -> Result<(), Error> {
         ("sudo", &tools.sudo),
         ("bash", &tools.bash),
         ("systemd_run", &tools.systemd_run),
+        ("journalctl", &tools.journalctl),
     ] {
         if !Path::new(path).is_absolute() {
             return Err(Error::Config(format!(
@@ -297,6 +298,8 @@ mod tests {
             "modules": [],
             "disk": {"collect_percent": 20, "minimum_percent": 10},
             "health": {"units": ["sshd.service"]},
+            "network": {"ports": {"tcp": [8080], "udp": []}},
+            "theme": {"flavor": "mocha", "palette": {}},
             "session": {"command": null, "providers": []},
             "tools": {
                 "ip": tool("ip"),
@@ -309,7 +312,8 @@ mod tests {
                 "nix_env": tool("nix-env"),
                 "sudo": "/run/wrappers/bin/sudo",
                 "bash": tool("bash"),
-                "systemd_run": tool("systemd-run")
+                "systemd_run": tool("systemd-run"),
+                "journalctl": tool("journalctl")
             }
         });
         Config::from_json(json.to_string().as_bytes()).expect("valid configuration")

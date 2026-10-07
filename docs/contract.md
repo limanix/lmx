@@ -55,7 +55,7 @@ A command that writes no answer, for example after a usage error or a lost conne
 | `system.degraded`          | The booted generation failed its health check                      |
 | `wait.timeout`             | A wait ended before its condition held                             |
 
-`lmx status` without `--wait` and `lmx version` do not use these codes or the exit statuses `3` and `130`.
+`lmx status` without `--wait`, `lmx version`, `lmx doctor` and `lmx net check` do not use these codes or the exit statuses `3` and `130`.
 Owner operations, `lmx store reserve`, `lmx apply`, `lmx apply cancel` and `lmx status --wait`, use exit status `3` when `lmxd` is unavailable.
 Only `lmx apply` uses exit status `130`.
 
@@ -177,6 +177,46 @@ A build is killed; a boot loader update that `nixos-rebuild` started finishes in
 | ------------------- | ----------------------------------------- |
 | `permission.denied` | The caller is not root                    |
 | `owner.unavailable` | `lmxd` cannot be reached; exit status `3` |
+
+## `lmx doctor`
+
+`lmx doctor` diagnoses the guest owner and works without `lmxd`.
+`data.checks` lists check records in the order the checks ran:
+
+| Field     | Meaning                                              |
+| --------- | ---------------------------------------------------- |
+| `check`   | Stable name of the check, such as `owner`            |
+| `status`  | `ok`, `warning`, `failed`, or `unknown`              |
+| `message` | The finding, for people                              |
+| `hint`    | What to do next; omitted when there is nothing to do |
+
+`unknown` means the caller lacks the privileges to check, and the hint says to use `sudo`.
+The exit status is `1` when any check failed; a warning does not fail the command.
+
+| Check         | Finds                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------ |
+| `config`      | Whether `/etc/lmx/config.json` is readable and valid                                                   |
+| `owner`       | Whether `lmxd` answers, and whether its version is the version of `lmx`                                |
+| `generations` | The generation conditions of `lmxd`, such as `RestartRequired`, or what the markers say without `lmxd` |
+| `disk`        | `DiskLow`, when `lmxd` reports it                                                                      |
+
+Example: [doctor](../contract/v1/doctor.json).
+
+## `lmx net check PORT`
+
+`lmx net check PORT [--udp]` checks why a port of the VM may be unreachable from the Mac.
+`data` has `port`, `protocol` (`tcp` or `udp`) and `checks`, check records as in `lmx doctor`, with the same exit status.
+
+| Check      | Finds                                                                                                                                                  |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `firewall` | Whether the guest firewall opens the port for its protocol; TCP 22 is always open for SSH, and Docker publishes ports with its own rules               |
+| `listener` | Whether something listens on the port, and whether only on a loopback address                                                                          |
+| `process`  | Which process holds the socket, and which user created it; Docker's proxy is a warning, because `network.ports` does not control what Docker publishes |
+
+Without a listener there is no `process` check.
+The VM's address and a connection from the Mac belong to `limanix net check` on the host.
+
+Example: [net check](../contract/v1/net-check.json).
 
 ## `lmx version`
 

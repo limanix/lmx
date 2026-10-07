@@ -11,12 +11,15 @@ use std::{
 
 use serde_json::{Value, json};
 
-/// Paths of the fake `ip` and `systemctl`.
+/// Paths of the fake `ip`, `systemctl` and `journalctl`.
 struct Tools {
     /// Prints one interface with a global IPv4 address.
     ip: PathBuf,
     /// Prints one failed unit.
     systemctl: PathBuf,
+    /// Prints the records of two builds for `lmx logs apply`, and fails like journalctl without
+    /// permission for anything else.
+    journalctl: PathBuf,
 }
 
 /// Fake tools shared by every test.
@@ -39,25 +42,46 @@ fn tools() -> &'static Tools {
                 "systemctl",
                 "limanix-store-guard.service loaded failed failed Guard",
             ),
+            journalctl: fake_script(
+                &directory,
+                "journalctl",
+                &format!(
+                    "#!/bin/sh\n\
+                     case \"$*\" in\n\
+                     \x20 '') ;;\n\
+                     \x20 *'-b0 _UID=0 LMX_KIND=SystemApply') printf '%s\\n' '{JOURNAL}' ;;\n\
+                     \x20 *) echo 'No journal files were opened due to insufficient permissions.' >&2; exit 1 ;;\n\
+                     esac\n"
+                ),
+            ),
         }
     })
 }
 
 /// Installs an executable that prints `output` into `directory`, runs it once and returns its path.
+fn fake_tool(directory: &Path, name: &str, output: &str) -> PathBuf {
+    assert!(!output.contains('\''), "tool output is single-quoted");
+    fake_script(
+        directory,
+        name,
+        &format!("#!/bin/sh\nprintf '%s\\n' '{output}'\n"),
+    )
+}
+
+/// Installs `script` as the executable `name` in `directory`, runs it once without arguments and
+/// returns its path.
 ///
 /// The script uses only shell built-ins because the tests run `lmx` with an empty `PATH`. Another
 /// test run, such as one an IDE starts, may be running the tool at the same time, so an outdated
 /// tool is replaced whole and a current one is left alone.
-fn fake_tool(directory: &Path, name: &str, output: &str) -> PathBuf {
-    assert!(!output.contains('\''), "tool output is single-quoted");
+fn fake_script(directory: &Path, name: &str, script: &str) -> PathBuf {
     let path = directory.join(name);
-    let script = format!("#!/bin/sh\nprintf '%s\\n' '{output}'\n");
-    let current = fs::read_to_string(&path).ok().as_deref() == Some(script.as_str())
+    let current = fs::read_to_string(&path).ok().as_deref() == Some(script)
         && fs::metadata(&path).is_ok_and(|metadata| metadata.permissions().mode() & 0o111 != 0);
     if !current {
         let staged = directory.join(format!(".{name}.{}", process::id()));
         fs::create_dir_all(directory).expect("create the tool directory");
-        fs::write(&staged, &script).expect("write the tool");
+        fs::write(&staged, script).expect("write the tool");
         fs::set_permissions(&staged, fs::Permissions::from_mode(0o755))
             .expect("make the tool executable");
         fs::rename(&staged, &path).expect("install the tool");
@@ -66,6 +90,21 @@ fn fake_tool(directory: &Path, name: &str, output: &str) -> PathBuf {
     assert!(first_run.status.success(), "{name} runs");
     path
 }
+
+/// Journal records of two builds of one `lmxd`, as `journalctl -o json` prints them.
+const JOURNAL: &str = concat!(
+    r#"{"MESSAGE":"applying generation 0123456789aa","LMX_TASK":"system-apply-1","LMX_GENERATION":"0123456789aa","_PID":"812","__REALTIME_TIMESTAMP":"1791364000000000"}"#,
+    "\n",
+    r#"{"MESSAGE":"applying generation 0123456789ab","LMX_TASK":"system-apply-2","LMX_GENERATION":"0123456789ab","_PID":"812","__REALTIME_TIMESTAMP":"1791364323000000"}"#,
+    "\n",
+    r#"{"MESSAGE":"building the system configuration...","LMX_TASK":"system-apply-2","_PID":"812","__REALTIME_TIMESTAMP":"1791364324000000"}"#,
+);
+
+/// Socket table with a TCP listener on `127.0.0.1:8080` of user 1000, socket inode 4242.
+const TCP: &str = "\
+  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 4242 1 0 100 0 0 10 0
+";
 
 /// Mount table with the root disk and two shared folders.
 const MOUNTINFO: &str = "\
@@ -114,6 +153,8 @@ impl Guest {
             "modules": [],
             "disk": {"collect_percent": 20, "minimum_percent": 10},
             "health": {"units": ["sshd.service"]},
+            "network": {"ports": {"tcp": [8080], "udp": []}},
+            "theme": {"flavor": "mocha", "palette": {}},
             "session": {"command": null, "providers": []},
             "tools": {
                 "ip": tools.ip,
@@ -126,7 +167,8 @@ impl Guest {
                 "nix_env": "/run/current-system/sw/bin/nix-env",
                 "sudo": "/run/wrappers/bin/sudo",
                 "bash": "/run/current-system/sw/bin/bash",
-                "systemd_run": "/run/current-system/sw/bin/systemd-run"
+                "systemd_run": "/run/current-system/sw/bin/systemd-run",
+                "journalctl": tools.journalctl
             }
         });
         guest.write("etc/lmx/config.json", &config.to_string());
@@ -836,4 +878,98 @@ fn a_closed_standard_output_ends_quietly() {
             String::from_utf8_lossy(&output.stderr)
         );
     }
+}
+
+#[test]
+fn doctor_without_lmxd_reports_the_owner_and_reads_the_markers() {
+    let guest = Guest::new();
+    let output = guest.lmx(&["doctor", "--json"], &guest.config());
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let answer: Value = serde_json::from_slice(&output.stdout).expect("one JSON answer");
+    let checks: Vec<(&str, &str)> = answer["data"]["checks"]
+        .as_array()
+        .expect("checks")
+        .iter()
+        .map(|check| {
+            (
+                check["check"].as_str().unwrap_or_default(),
+                check["status"].as_str().unwrap_or_default(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        checks,
+        [
+            ("config", "ok"),
+            ("owner", "failed"),
+            ("generations", "warning")
+        ]
+    );
+
+    let short = guest.lmx(&["status", "--short"], &guest.config());
+    assert!(short.status.success(), "{short:?}");
+    assert_eq!(String::from_utf8_lossy(&short.stdout), "lmxd?\n");
+}
+
+#[test]
+fn net_check_finds_a_listener_that_only_the_guest_reaches() {
+    let guest = Guest::new();
+    guest.write("proc/net/tcp", TCP);
+    guest.write("proc/4242/comm", "python3\n");
+    fs::create_dir_all(guest.path("proc/4242/fd")).expect("create fd");
+    symlink("socket:[4242]", guest.path("proc/4242/fd/3")).expect("link the socket");
+    guest.write(
+        "etc/passwd",
+        "root:x:0:0::/root:/bin/sh\ndev:x:1000:100::/home/dev:/bin/sh\n",
+    );
+
+    let output = guest.lmx(&["net", "check", "8080", "--json"], &guest.config());
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let answer: Value = serde_json::from_slice(&output.stdout).expect("one JSON answer");
+    assert_eq!(
+        answer["data"],
+        json!({
+            "port": 8080,
+            "protocol": "tcp",
+            "checks": [
+                {
+                    "check": "firewall",
+                    "status": "ok",
+                    "message": "TCP 8080 is open in the guest firewall."
+                },
+                {
+                    "check": "listener",
+                    "status": "failed",
+                    "message": "TCP 8080 listens on 127.0.0.1 only, so it is reachable only inside the guest.",
+                    "hint": "Make the application listen on 0.0.0.0 or the guest address."
+                },
+                {
+                    "check": "process",
+                    "status": "ok",
+                    "message": "python3 (pid 4242) holds the socket of user dev."
+                }
+            ]
+        })
+    );
+}
+
+#[test]
+fn logs_show_the_latest_run_of_a_kind() {
+    let guest = Guest::new();
+    let output = guest.lmx(&["logs", "apply"], &guest.config());
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "system-apply-2, generation 0123456789ab, 2026-10-07 09:12:03 UTC\n\
+         applying generation 0123456789ab\n\
+         building the system configuration...\n"
+    );
+
+    // The fake fails for any other query, as journalctl does for a user without access.
+    let output = guest.lmx(&["logs", "health"], &guest.config());
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("run sudo lmx logs health"),
+        "{output:?}"
+    );
 }

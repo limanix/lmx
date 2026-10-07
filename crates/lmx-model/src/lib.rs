@@ -14,6 +14,8 @@
 //! | [`Owner`]    | `lmxd`, through `lmx status`            | the host and people     |
 //! | [`Reserve`]  | `lmx store reserve`                     | the host                |
 //! | [`Apply`]    | `lmx apply`, with [`ApplyEvent`]s       | the host and people     |
+//! | [`Doctor`]   | `lmx doctor`                            | the host and people     |
+//! | [`NetCheck`] | `lmx net check`                         | the host and people     |
 //! | [`Version`]  | `lmx version`                           | the host and people     |
 //!
 //! JSON field names are `snake_case`. The host contract is versioned by [`CONTRACT_VERSION`] and
@@ -24,6 +26,7 @@
 #![forbid(unsafe_code)]
 
 mod apply;
+mod check;
 mod config;
 mod contract;
 mod owner;
@@ -34,8 +37,10 @@ mod version;
 pub use apply::{
     Apply, ApplyEvent, ApplyPhase, ApplyState, BuildFailure, CancelApply, OutputStream,
 };
+pub use check::{Check, CheckStatus, Doctor, NetCheck, Protocol};
 pub use config::{
-    CONFIG_PATH, CONFIG_SCHEMA, Config, ConfigError, DiskPolicy, Health, Session, Tools, User, Vm,
+    CONFIG_PATH, CONFIG_SCHEMA, Config, ConfigError, DiskPolicy, Health, Network, Ports, Session,
+    Theme, Tools, User, Vm,
 };
 pub use contract::{CONTRACT_VERSION, Envelope, ErrorBody, ErrorCode};
 pub use owner::{

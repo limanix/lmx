@@ -14,6 +14,8 @@ const REFERENCE: &str = "\
 Inside this VM
   lmx info              Show the kernel, guest disk, shared folders and failed units.
   lmx status            Show generations, disk, network, failed units; sudo shows every fact.
+  lmx doctor            Find what is wrong with the guest owner and what to do about it.
+  lmx net check PORT    Check why a port may be unreachable from the Mac.
   lmx welcome           Show the workspace welcome again.
   limanix-session NAME  Open a named session with the selected session provider.
   pbcopy < FILE         Copy to the Mac clipboard through the terminal.
@@ -79,7 +81,7 @@ pub(crate) fn modules(config: &Config) -> String {
 
 #[cfg(test)]
 mod tests {
-    use lmx_model::{Config, DiskPolicy, Health, Session, Tools, User, Vm};
+    use lmx_model::{Config, DiskPolicy, Health, Network, Session, Theme, Tools, User, Vm};
 
     use super::*;
 
@@ -105,6 +107,13 @@ mod tests {
                 minimum_percent: 10,
             },
             health: Health { units: vec![] },
+            network: Network {
+                ports: Default::default(),
+            },
+            theme: Theme {
+                flavor: "mocha".into(),
+                palette: Default::default(),
+            },
             session: Session {
                 command: None,
                 providers: vec!["lmx:tmux".into()],
@@ -121,6 +130,7 @@ mod tests {
                 sudo: "sudo".into(),
                 bash: "bash".into(),
                 systemd_run: "systemd-run".into(),
+                journalctl: "journalctl".into(),
             },
         }
     }
@@ -135,6 +145,8 @@ mod tests {
         for command in [
             "lmx info",
             "lmx status",
+            "lmx doctor",
+            "lmx net check PORT",
             "lmx welcome",
             "limanix-session NAME",
             "pbcopy",

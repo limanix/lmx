@@ -10,6 +10,7 @@ use std::{
 
 use lmx_facts::{
     disk::STORE_PATH, generations::GenerationPaths, machine::MEMINFO_PATH, mounts::MOUNTINFO_PATH,
+    sockets::PROC_PATH,
 };
 use lmx_ipc::SOCKET_PATH;
 use lmx_model::{CONFIG_PATH, Config};
@@ -52,6 +53,16 @@ impl System {
         self.root.join(MEMINFO_PATH.trim_start_matches('/'))
     }
 
+    /// The process file system.
+    pub(crate) fn proc(&self) -> PathBuf {
+        self.root.join(PROC_PATH.trim_start_matches('/'))
+    }
+
+    /// The user database, for user names.
+    pub(crate) fn passwd(&self) -> PathBuf {
+        self.root.join("etc/passwd")
+    }
+
     /// Socket of the guest owner daemon `lmxd`.
     pub(crate) fn owner_socket(&self) -> PathBuf {
         self.root.join(SOCKET_PATH.trim_start_matches('/'))
@@ -67,6 +78,14 @@ impl System {
         self.config.as_ref().map_or_else(
             |_| PathBuf::from("ip"),
             |config| PathBuf::from(&config.tools.ip),
+        )
+    }
+
+    /// `journalctl` from the configuration, or from `PATH` when the configuration is unreadable.
+    pub(crate) fn journalctl(&self) -> PathBuf {
+        self.config.as_ref().map_or_else(
+            |_| PathBuf::from("journalctl"),
+            |config| PathBuf::from(&config.tools.journalctl),
         )
     }
 

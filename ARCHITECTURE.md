@@ -44,6 +44,8 @@ Caller commands, the welcome, the clipboard and sessions, depend on the caller's
 - `lmxd` runs programs only as Solti tasks, never with `std::process`: tools by their absolute paths in the configuration, and `/bin/sh` for the roots report, the health check and finalize.
 - An apply's state lives in `lmxd`'s memory; after a restart the generation markers are the truth. Finalize runs only in the daemon of the booted system, never in `lmxd --transient`.
 - One daemon serves the socket at a time: `lmxd` refuses a socket that another daemon still serves, so two daemons never apply at once.
+- `lmxd` writes its journal fields without a prefix: task output carries `LMX_TASK` and `LMX_KIND`, apply events also `LMX_GENERATION`. `lmx logs` depends on these names.
+- Colors come from `theme.palette` in the configuration; `lmx` never hard-codes another theme than its Mocha fallback.
 - Only `lmxd` creates its tasks. The Task API on its socket reads them, and root may cancel or delete them.
 - `pbcopy`, `pbpaste` and `limanix-session` keep the syntax of the shell commands they replaced; change them together with the platform.
 
@@ -52,9 +54,11 @@ Caller commands, the welcome, the clipboard and sessions, depend on the caller's
 | Area                | Responsibility                                                                    | Start here                                                                    |
 | ------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | Contract types      | Configuration, envelope, error codes, status, apply and version                   | [`lmx-model/src/lib.rs`](crates/lmx-model/src/lib.rs)                         |
-| Fact readers        | Disk, generations, machine, mounts, network and failed units                      | [`lmx-facts/src/lib.rs`](crates/lmx-facts/src/lib.rs)                         |
+| Fact readers        | Disk, generations, machine, mounts, network, sockets, journal and failed units    | [`lmx-facts/src/lib.rs`](crates/lmx-facts/src/lib.rs)                         |
 | Command line        | Commands, other names, output selection and exit codes                            | [`lmx/src/main.rs`](crates/lmx/src/main.rs)                                   |
 | Status              | Collecting facts and rendering them                                               | [`lmx/src/status.rs`](crates/lmx/src/status.rs)                               |
+| Diagnostics         | `lmx doctor` and `lmx net check`, and their check records                         | [`lmx/src/doctor.rs`](crates/lmx/src/doctor.rs)                               |
+| Task history        | `lmx logs` from the journal fields of `lmxd`                                      | [`lmx/src/logs.rs`](crates/lmx/src/logs.rs)                                   |
 | Guest pages         | Help, info and the welcome for people in the guest                                | [`lmx/src/welcome.rs`](crates/lmx/src/welcome.rs)                             |
 | Terminal text       | Columns, wrapping and the palette                                                 | [`lmx/src/layout.rs`](crates/lmx/src/layout.rs)                               |
 | Caller commands     | The clipboard through the terminal or tmux, and named sessions                    | [`lmx/src/clipboard.rs`](crates/lmx/src/clipboard.rs)                         |

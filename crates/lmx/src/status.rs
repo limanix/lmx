@@ -2,12 +2,14 @@
 //!
 //! Every fact is read independently. A fact that cannot be read becomes `null` with a
 //! [`Problem`], so the host and people always get the rest. The owner part comes from `lmxd` when it
-//! answers within two seconds.
+//! answers within two seconds. `--short` asks `lmxd` only, and prints what needs attention.
 
-use std::{io, process::ExitCode};
+use std::{io, process::ExitCode, time::Duration};
 
 use lmx_facts::{FactError, disk, generations, network, units};
-use lmx_model::{Envelope, Problem, Status};
+use lmx_model::{
+    DEGRADED, DISK_LOW, Envelope, OUT_OF_DATE, Owner, Problem, RESTART_REQUIRED, Status,
+};
 
 use crate::{
     cli::{Goal, StatusArgs},
@@ -16,8 +18,19 @@ use crate::{
     wait,
 };
 
-/// Runs `lmx status`, or waits for a goal first with `--wait`.
+/// How long `lmx status --short` waits for `lmxd`; a prompt must never hang.
+const SHORT_TIMEOUT: Duration = Duration::from_millis(200);
+
+/// Runs `lmx status`, waits for a goal first with `--wait`, or prints the short form.
 pub(crate) fn run(system: &System, args: &StatusArgs) -> io::Result<ExitCode> {
+    if args.short {
+        let words = owner::status_within(&system.owner_socket(), SHORT_TIMEOUT)
+            .map_or_else(|_| vec!["lmxd?"], |owner| short(&owner));
+        if !words.is_empty() {
+            output::write_text(&format!("{}\n", words.join(" ")))?;
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
     if let (Some(Goal::Converged), Some(generation)) = (args.wait, &args.generation) {
         let timeout = args.timeout.unwrap_or(wait::TIMEOUT);
         return wait::converged(system, generation, timeout, args.output.json);
@@ -29,6 +42,37 @@ pub(crate) fn run(system: &System, args: &StatusArgs) -> io::Result<ExitCode> {
         output::write_text(&render(&status))?;
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// The words of `lmx status --short`: what needs attention, most urgent first; none when all is
+/// well.
+fn short(owner: &Owner) -> Vec<&'static str> {
+    let holds = |kind: &str| {
+        owner
+            .conditions
+            .iter()
+            .any(|condition| condition.kind == kind)
+    };
+    let applying = owner
+        .operations
+        .iter()
+        .any(|operation| operation.kind == "SystemApply");
+    let mut words = Vec::new();
+    if holds(DEGRADED) {
+        words.push("degraded");
+    }
+    if holds(DISK_LOW) {
+        words.push("disk-low");
+    }
+    if holds(RESTART_REQUIRED) {
+        words.push("restart");
+    }
+    if applying {
+        words.push("applying");
+    } else if holds(OUT_OF_DATE) {
+        words.push("apply");
+    }
+    words
 }
 
 /// Reads every fact of [`Status`].
@@ -217,6 +261,36 @@ mod tests {
              Owner         lmxd 0.1.0, StoreCollect running\n\
              Condition     Less than 10% of the guest disk is free.\n"
         );
+    }
+
+    #[test]
+    fn the_short_form_names_only_what_needs_attention() {
+        let owner = |kinds: &[&str], applying: bool| Owner {
+            version: "0.1.0".into(),
+            conditions: kinds
+                .iter()
+                .map(|kind| Condition {
+                    kind: (*kind).into(),
+                    message: String::new(),
+                })
+                .collect(),
+            operations: applying
+                .then(|| Operation {
+                    task: "system-apply-1".into(),
+                    kind: "SystemApply".into(),
+                    phase: "running".into(),
+                    created_at: 0,
+                })
+                .into_iter()
+                .collect(),
+        };
+        assert!(short(&owner(&["Converged"], false)).is_empty());
+        assert_eq!(
+            short(&owner(&[RESTART_REQUIRED, DISK_LOW, DEGRADED], false)),
+            ["degraded", "disk-low", "restart"]
+        );
+        assert_eq!(short(&owner(&[OUT_OF_DATE], false)), ["apply"]);
+        assert_eq!(short(&owner(&[OUT_OF_DATE], true)), ["applying"]);
     }
 
     #[test]

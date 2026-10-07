@@ -25,21 +25,25 @@ person ───────► lmx <command>              ──► text for pe
 
 ## Commands
 
-| Command                 | Answers or does                                                                                                |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `lmx help`              | The workspace and the commands inside the VM and on the Mac; also `lmx`, `lmx -h`                              |
-| `lmx info`              | The kernel, guest disk, shared folders and failed units                                                        |
-| `lmx welcome`           | The summary an interactive shell prints when it starts                                                         |
-| `lmx status`            | Desired, built and booted generations; store disk usage; interfaces; failed systemd units; the state of `lmxd` |
-| `lmx version`           | The binary version and the host contract version                                                               |
-| `lmx store reserve`     | Collects unreferenced store paths when space is low; run in `lmxd`, root only                                  |
-| `lmx apply -g G`        | Builds the mounted generation G for the next boot; run in `lmxd`, root only; `--follow` streams the build      |
-| `lmx apply cancel -g G` | Stops the apply of generation G; root only                                                                     |
-| `lmx clipboard copy`    | Copies standard input to the Mac clipboard                                                                     |
-| `lmx clipboard paste`   | Prints the Mac clipboard, if the terminal allows reads                                                         |
-| `lmx session NAME`      | Opens a named session with the provider that the selected modules configure                                    |
+| Command                 | Answers or does                                                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `lmx help`              | The workspace and the commands inside the VM and on the Mac; also `lmx`, `lmx -h`                                     |
+| `lmx info`              | The kernel, guest disk, shared folders and failed units                                                               |
+| `lmx welcome`           | The summary an interactive shell prints when it starts                                                                |
+| `lmx status`            | Desired, built and booted generations; store disk usage; interfaces; failed systemd units; the state of `lmxd`        |
+| `lmx doctor`            | Findings about the configuration, `lmxd` and the generations, with what to do next                                    |
+| `lmx net check PORT`    | Why a port may be unreachable from the Mac: firewall rule, listener and process                                       |
+| `lmx logs KIND`         | The output of the latest `lmxd` task of a kind, such as `apply`, from the journal; `--previous` reads the boot before |
+| `lmx version`           | The binary version and the host contract version                                                                      |
+| `lmx store reserve`     | Collects unreferenced store paths when space is low; run in `lmxd`, root only                                         |
+| `lmx apply -g G`        | Builds the mounted generation G for the next boot; run in `lmxd`, root only; `--follow` streams the build             |
+| `lmx apply cancel -g G` | Stops the apply of generation G; root only                                                                            |
+| `lmx clipboard copy`    | Copies standard input to the Mac clipboard                                                                            |
+| `lmx clipboard paste`   | Prints the Mac clipboard, if the terminal allows reads                                                                |
+| `lmx session NAME`      | Opens a named session with the provider that the selected modules configure                                           |
 
-Add `--json` to `status`, `version`, `store reserve`, `apply` and `apply cancel` to answer with the [host contract](docs/contract.md).
+Add `--json` to `status`, `doctor`, `net check`, `version`, `store reserve`, `apply` and `apply cancel` to answer with the [host contract](docs/contract.md).
+`lmx status --short` prints only what needs attention, such as `restart` or `disk-low`, for tmux and the prompt.
 `lmx status --wait converged -g G` answers once `lmxd` reports generation G booted, healthy and finalized.
 `lmx status` reads every fact independently: an unreadable fact is reported as a problem, and the others are still answered.
 
@@ -67,7 +71,7 @@ Reference units are in [`packaging/systemd/`](packaging/systemd).
 - Facts are read in the caller's process with the caller's privileges and need no daemon.
 - Owner operations run only in `lmxd`; without it they fail with exit status 3 instead of running in the caller.
 - The clipboard travels through the terminal with OSC 52, or through tmux inside tmux; the terminal on the Mac must allow it.
-- Text is colored only on a terminal, never with `NO_COLOR` or `TERM=dumb`.
+- Text is colored only on a terminal, never with `NO_COLOR` or `TERM=dumb`, with the theme of the declaration (Catppuccin Mocha by default).
 - Configuration comes only from NixOS (`/etc/lmx/config.json`), never from the host at runtime.
 - Release archives hold `lmx` and `lmxd`, static musl executables for `aarch64` and `x86_64` Linux.
 

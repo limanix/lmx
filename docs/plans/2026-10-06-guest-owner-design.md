@@ -9,7 +9,11 @@ in the Nix store and answers `lmx store reserve`. See [the M2 design](2026-10-07
 and [the M2 plan](2026-10-07-m2-lmxd-store.md). M3 is implemented in this repository: apply, cancel,
 the transient daemon, the health check, finalize and the converged wait; the host switches to them in
 M1c. See [the M3 design](2026-10-07-m3-apply-finalize-design.md) and
-[the M3 plan](2026-10-07-m3-apply-finalize.md).
+[the M3 plan](2026-10-07-m3-apply-finalize.md). M4 is implemented in this repository: `doctor`,
+`net check`, `logs`, `status --short`, the theme from the configuration and journal fields without a
+prefix; the catalog's theme capability, the tmux and prompt segments and the journald limit follow in
+M1c. See [the M4 design](2026-10-07-m4-guest-tools-design.md) and
+[the M4 plan](2026-10-07-m4-guest-tools.md).
 
 Scope: this repository, plus the changes it requires in `client` (host and
 platform base) and `modules` (catalog).

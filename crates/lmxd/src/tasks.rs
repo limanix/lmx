@@ -117,6 +117,17 @@ impl Kind {
     fn from_name(name: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.name() == name)
     }
+
+    /// Kind of the task named `task`, such as `system-apply-3`.
+    pub(crate) fn of_task(task: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| {
+            task.strip_prefix(kind.task_prefix())
+                .and_then(|rest| rest.strip_prefix('-'))
+                .is_some_and(|number| {
+                    !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+                })
+        })
+    }
 }
 
 /// CPU and I/O priority of a collection.
@@ -412,6 +423,7 @@ mod tests {
                 sudo: "/bin/sudo".into(),
                 bash: "/bin/bash".into(),
                 systemd_run: "/bin/systemd-run".into(),
+                journalctl: "/bin/journalctl".into(),
             },
             paths: Paths::new(root.to_path_buf()),
             user: "dev".into(),
@@ -574,7 +586,11 @@ printf '%s\n' \
     fn names_every_kind_under_the_lmx_api_version() {
         for kind in Kind::ALL {
             assert_eq!(Kind::from_name(kind.name()), Some(kind));
+            let task = format!("{}-12", kind.task_prefix());
+            assert_eq!(Kind::of_task(&task), Some(kind));
             assert!(WorkloadTypeMeta::new(API_VERSION, kind.name()).is_ok());
         }
+        assert_eq!(Kind::of_task("system-apply"), None);
+        assert_eq!(Kind::of_task("system-apply-x"), None);
     }
 }
