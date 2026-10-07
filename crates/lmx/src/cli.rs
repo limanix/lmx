@@ -34,11 +34,22 @@ pub(crate) enum Command {
     Status(OutputArgs),
     /// Show the lmx version and the host contract it speaks.
     Version(OutputArgs),
+    /// Keep room in the Nix store; the work runs in lmxd.
+    #[command(subcommand)]
+    Store(StoreCommand),
     /// Use the Mac clipboard through the terminal; also installed as pbcopy and pbpaste.
     #[command(subcommand)]
     Clipboard(ClipboardCommand),
     /// Open a named session with the selected provider; also installed as limanix-session.
     Session(SessionArgs),
+}
+
+/// Store operations.
+#[derive(Debug, Subcommand)]
+pub(crate) enum StoreCommand {
+    /// Collect unreferenced store paths when free space is low; the host runs it before it stops
+    /// the VM.
+    Reserve(OutputArgs),
 }
 
 /// Clipboard operations.

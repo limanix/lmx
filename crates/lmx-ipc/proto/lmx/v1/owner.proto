@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+// Calls from `lmx` to the guest owner daemon `lmxd`, served on `/run/lmx/lmx.sock`.
+package lmx.v1;
+
+// The guest owner daemon.
+service Owner {
+  // What `lmxd` is doing and which conditions hold. Open to every caller.
+  rpc Status(StatusRequest) returns (StatusResponse);
+  // Collects unreferenced store paths when free space is low. Root only.
+  rpc Reserve(ReserveRequest) returns (ReserveResponse);
+}
+
+// Usage of one file system, as in the host contract.
+message DiskUsage {
+  // Total size in bytes.
+  uint64 bytes = 1;
+  // Free bytes, including blocks reserved for root.
+  uint64 free_bytes = 2;
+  // Free bytes available to unprivileged users.
+  uint64 available_bytes = 3;
+  // Total inodes; zero when the file system has no fixed inode table.
+  uint64 inodes = 4;
+  // Free inodes.
+  uint64 free_inodes = 5;
+}
+
+// A failure the host contract names.
+message Failure {
+  // Host contract error code, such as `disk.low`.
+  string code = 1;
+  // Explanation for people.
+  string message = 2;
+  // Code-specific details as a JSON object; empty without details.
+  string details = 3;
+}
+
+// Input of `Status`.
+message StatusRequest {}
+
+// A condition of the guest that needs attention.
+message Condition {
+  // Stable name, such as `DiskLow`.
+  string type = 1;
+  // Explanation for people.
+  string message = 2;
+}
+
+// One operation of `lmxd`.
+message Operation {
+  // Name of the task that runs the operation, such as `store-collect-1`.
+  string task = 1;
+  // Kind of the operation, such as `StoreCollect`.
+  string kind = 2;
+  // Lifecycle phase, such as `running`.
+  string phase = 3;
+  // When the operation was requested, in Unix milliseconds.
+  uint64 created_at = 4;
+}
+
+// Output of `Status`.
+message StatusResponse {
+  // Release version of `lmxd`.
+  string version = 1;
+  // Conditions derived from facts when `lmxd` was asked.
+  repeated Condition conditions = 2;
+  // Operations `lmxd` has accepted and not finished.
+  repeated Operation operations = 3;
+}
+
+// Input of `Reserve`.
+message ReserveRequest {}
+
+// Store disk usage before and after a reserve.
+message ReserveResult {
+  // Usage before the reserve.
+  DiskUsage before = 1;
+  // Usage after the reserve.
+  DiskUsage after = 2;
+  // Free bytes gained; zero when usage grew.
+  uint64 freed_bytes = 3;
+  // Whether unreferenced store paths were collected.
+  bool collected = 4;
+}
+
+// Output of `Reserve`.
+message ReserveResponse {
+  // A result, or a failure such as `disk.low`.
+  oneof outcome {
+    // The reserve succeeded.
+    ReserveResult result = 1;
+    // The reserve failed.
+    Failure failure = 2;
+  }
+}

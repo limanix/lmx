@@ -15,6 +15,9 @@ pub(crate) const FAILURE: u8 = 1;
 /// Exit status of a usage error.
 const USAGE: u8 = 2;
 
+/// Exit status when the guest owner daemon `lmxd` is unavailable.
+pub(crate) const UNAVAILABLE: u8 = 3;
+
 /// Writes one envelope as a single JSON line to standard output.
 pub(crate) fn write_json<T: Serialize>(envelope: &Envelope<T>) -> io::Result<()> {
     let mut stdout = io::stdout().lock();

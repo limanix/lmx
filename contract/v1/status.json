@@ -35,6 +35,18 @@
         ]
       }
     ],
-    "failed_units": []
+    "failed_units": [],
+    "owner": {
+      "version": "0.1.0",
+      "conditions": [],
+      "operations": [
+        {
+          "task": "store-collect-1",
+          "kind": "StoreCollect",
+          "phase": "running",
+          "created_at": 1791374400000
+        }
+      ]
+    }
   }
 }

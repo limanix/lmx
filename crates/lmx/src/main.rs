@@ -8,14 +8,16 @@
 //! | `lmx help`            | facts  | the workspace and the commands inside the VM and on the Mac |
 //! | `lmx info`            | facts  | kernel, guest disk, shared folders and failed units         |
 //! | `lmx welcome`         | caller | the summary an interactive shell shows when it starts       |
-//! | `lmx status`          | facts  | generations, disk, interfaces and failed units              |
+//! | `lmx status`          | facts  | generations, disk, interfaces, failed units, and `lmxd`     |
 //! | `lmx version`         | facts  | the binary version and the host contract it speaks          |
+//! | `lmx store reserve`   | owner  | room in the store before the host stops the VM, in `lmxd`   |
 //! | `lmx clipboard copy`  | caller | copies standard input to the Mac clipboard                  |
 //! | `lmx clipboard paste` | caller | prints the Mac clipboard, if the terminal allows reads      |
 //! | `lmx session NAME`    | caller | opens a named session with the selected provider            |
 //!
-//! Facts are read in the caller's process with the caller's privileges and need no daemon. Caller
-//! commands act on the caller's terminal and environment, so only the caller can run them.
+//! Facts are read in the caller's process with the caller's privileges and need no daemon. Owner
+//! operations run only in the guest owner daemon `lmxd`; without it they fail with exit status 3.
+//! Caller commands act on the caller's terminal and environment, so only the caller can run them.
 //!
 //! ## Other names
 //!
@@ -33,13 +35,13 @@
 //! Environment variables let tests point the binary at prepared files. `sudo` drops all of them by
 //! default, so the host never sets them by accident.
 //!
-//! | Variable            | Replaces                                               |
-//! |---------------------|--------------------------------------------------------|
-//! | `LMX_CONFIG`        | [`lmx_model::CONFIG_PATH`]                             |
-//! | `LMX_SYSTEM_ROOT`   | `/` for generation markers, the store path and `/proc` |
-//! | `LMX_TTY_IN`        | `/dev/tty` for reading the terminal's clipboard reply  |
-//! | `LMX_TTY_OUT`       | `/dev/tty` for writing clipboard sequences             |
-//! | `LMX_PASTE_TIMEOUT` | the 10 seconds `pbpaste` waits for a reply, in seconds |
+//! | Variable            | Replaces                                                                  |
+//! |---------------------|---------------------------------------------------------------------------|
+//! | `LMX_CONFIG`        | [`lmx_model::CONFIG_PATH`]                                                |
+//! | `LMX_SYSTEM_ROOT`   | `/` for generation markers, the store path, `/proc` and the `lmxd` socket |
+//! | `LMX_TTY_IN`        | `/dev/tty` for reading the terminal's clipboard reply                     |
+//! | `LMX_TTY_OUT`       | `/dev/tty` for writing clipboard sequences                                |
+//! | `LMX_PASTE_TIMEOUT` | the 10 seconds `pbpaste` waits for a reply, in seconds                    |
 #![forbid(unsafe_code)]
 
 mod cli;
@@ -49,10 +51,12 @@ mod help;
 mod info;
 mod layout;
 mod output;
+mod owner;
 mod palette;
 mod process;
 mod session;
 mod status;
+mod store;
 mod system;
 mod version;
 mod welcome;
@@ -68,7 +72,7 @@ use std::{
 use clap::Parser;
 
 use crate::{
-    cli::{Cli, ClipboardCommand, Command},
+    cli::{Cli, ClipboardCommand, Command, StoreCommand},
     system::System,
 };
 
@@ -118,6 +122,9 @@ fn lmx(mut arguments: Vec<OsString>) -> io::Result<ExitCode> {
         Some(Command::Welcome) => welcome::run(&System::from_environment()),
         Some(Command::Status(args)) => status::run(&System::from_environment(), &args),
         Some(Command::Version(args)) => version::run(&args),
+        Some(Command::Store(StoreCommand::Reserve(args))) => {
+            store::reserve(&System::from_environment(), &args)
+        }
         Some(Command::Clipboard(ClipboardCommand::Copy)) => clipboard::copy(),
         Some(Command::Clipboard(ClipboardCommand::Paste)) => clipboard::paste(),
         Some(Command::Session(args)) => {

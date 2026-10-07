@@ -10,7 +10,7 @@
 //! `contract` lets the host refuse an answer it cannot decode instead of misreading it. `code` is for
 //! programs and stays stable; `message` is for people and may change.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 
 /// Host contract version written into every envelope.
@@ -68,32 +68,79 @@ pub struct ErrorBody {
 }
 
 /// Stable failure codes of the host contract.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// A code this binary does not know, such as one from a newer `lmxd`, is kept as
+/// [`ErrorCode::Other`], so it can be passed on unchanged and read as a generic failure.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ErrorCode {
     /// `lmxd` is not reachable.
-    #[serde(rename = "owner.unavailable")]
     OwnerUnavailable,
     /// `nixos-rebuild` failed for the requested generation.
-    #[serde(rename = "apply.build_failed")]
     ApplyBuildFailed,
     /// The operation was cancelled by an explicit request.
-    #[serde(rename = "apply.cancelled")]
     ApplyCancelled,
     /// Free bytes or inodes are below the platform minimum.
-    #[serde(rename = "disk.low")]
     DiskLow,
+    /// The usage of the store file system cannot be read.
+    DiskUnreadable,
     /// A required network destination, such as the binary cache, is unreachable.
-    #[serde(rename = "network.unreachable")]
     NetworkUnreachable,
     /// The caller is not allowed to run the operation.
-    #[serde(rename = "permission.denied")]
     PermissionDenied,
     /// The mounted inputs belong to a different generation than requested.
-    #[serde(rename = "generation.mismatch")]
     GenerationMismatch,
     /// The caller requested a contract version this binary does not speak.
-    #[serde(rename = "contract.unsupported")]
     ContractUnsupported,
+    /// A code this binary does not know, as received.
+    Other(String),
+}
+
+impl ErrorCode {
+    /// Wire name of the code, such as `disk.low`.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::OwnerUnavailable => "owner.unavailable",
+            Self::ApplyBuildFailed => "apply.build_failed",
+            Self::ApplyCancelled => "apply.cancelled",
+            Self::DiskLow => "disk.low",
+            Self::DiskUnreadable => "disk.unreadable",
+            Self::NetworkUnreachable => "network.unreachable",
+            Self::PermissionDenied => "permission.denied",
+            Self::GenerationMismatch => "generation.mismatch",
+            Self::ContractUnsupported => "contract.unsupported",
+            Self::Other(code) => code,
+        }
+    }
+
+    /// Code with the wire name `name`, or [`ErrorCode::Other`] for a name this binary does not know.
+    #[must_use]
+    pub fn from_wire(name: &str) -> Self {
+        match name {
+            "owner.unavailable" => Self::OwnerUnavailable,
+            "apply.build_failed" => Self::ApplyBuildFailed,
+            "apply.cancelled" => Self::ApplyCancelled,
+            "disk.low" => Self::DiskLow,
+            "disk.unreadable" => Self::DiskUnreadable,
+            "network.unreachable" => Self::NetworkUnreachable,
+            "permission.denied" => Self::PermissionDenied,
+            "generation.mismatch" => Self::GenerationMismatch,
+            "contract.unsupported" => Self::ContractUnsupported,
+            other => Self::Other(other.to_owned()),
+        }
+    }
+}
+
+impl Serialize for ErrorCode {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for ErrorCode {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer).map(|name| Self::from_wire(&name))
+    }
 }
 
 #[cfg(test)]
@@ -154,16 +201,27 @@ mod tests {
             (ErrorCode::ApplyBuildFailed, "apply.build_failed"),
             (ErrorCode::ApplyCancelled, "apply.cancelled"),
             (ErrorCode::DiskLow, "disk.low"),
+            (ErrorCode::DiskUnreadable, "disk.unreadable"),
             (ErrorCode::NetworkUnreachable, "network.unreachable"),
             (ErrorCode::PermissionDenied, "permission.denied"),
             (ErrorCode::GenerationMismatch, "generation.mismatch"),
             (ErrorCode::ContractUnsupported, "contract.unsupported"),
         ] {
-            assert_eq!(serde_json::to_value(code).expect("serialize"), name);
+            assert_eq!(serde_json::to_value(&code).expect("serialize"), name);
             assert_eq!(
                 serde_json::from_value::<ErrorCode>(name.into()).expect("deserialize"),
                 code
             );
         }
+    }
+
+    #[test]
+    fn unknown_codes_pass_through_unchanged() {
+        let code: ErrorCode = serde_json::from_value("store.busy".into()).expect("deserialize");
+        assert_eq!(code, ErrorCode::Other("store.busy".into()));
+        assert_eq!(
+            serde_json::to_value(&code).expect("serialize"),
+            "store.busy"
+        );
     }
 }

@@ -3,7 +3,10 @@
 Status: design agreed on 2026-10-06. M1a is implemented: repository, contract model, facts,
 `lmx status`, release pipeline. See [the M1a plan](2026-10-06-m1a-lmx-foundation.md). M1b is
 implemented: help, info, welcome, clipboard and sessions in the binary. See
-[the M1b plan](2026-10-06-m1b-lmx-user-surface.md).
+[the M1b plan](2026-10-06-m1b-lmx-user-surface.md). The S1 spike passed; its findings
+for M2 are in [the S1 results](2026-10-07-s1-solti-spike.md). M2 is implemented: `lmxd` keeps room
+in the Nix store and answers `lmx store reserve`. See [the M2 design](2026-10-07-m2-lmxd-store-design.md)
+and [the M2 plan](2026-10-07-m2-lmxd-store.md).
 
 Scope: this repository, plus the changes it requires in `client` (host and
 platform base) and `modules` (catalog).

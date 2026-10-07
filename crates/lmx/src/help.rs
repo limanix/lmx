@@ -110,6 +110,10 @@ mod tests {
             tools: Tools {
                 ip: "ip".into(),
                 systemctl: "systemctl".into(),
+                nix_store: "nix-store".into(),
+                nice: "nice".into(),
+                ionice: "ionice".into(),
+                grep: "grep".into(),
             },
         }
     }

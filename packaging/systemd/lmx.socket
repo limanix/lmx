@@ -1,0 +1,12 @@
+# Reference unit for the LimaNix platform base, which renders its own copy.
+# The socket outlives lmx.service, so calls wait in the backlog while the daemon restarts.
+[Unit]
+Description=Socket of the LimaNix guest owner
+
+[Socket]
+ListenStream=/run/lmx/lmx.sock
+# Every user may connect; lmxd decides what each caller may do from its peer credentials.
+SocketMode=0666
+
+[Install]
+WantedBy=sockets.target

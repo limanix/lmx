@@ -11,6 +11,7 @@ use std::{
 use lmx_facts::{
     disk::STORE_PATH, generations::GenerationPaths, machine::MEMINFO_PATH, mounts::MOUNTINFO_PATH,
 };
+use lmx_ipc::SOCKET_PATH;
 use lmx_model::{CONFIG_PATH, Config};
 
 /// Guest locations and the platform configuration, resolved once per command.
@@ -49,6 +50,11 @@ impl System {
     /// Memory information.
     pub(crate) fn meminfo(&self) -> PathBuf {
         self.root.join(MEMINFO_PATH.trim_start_matches('/'))
+    }
+
+    /// Socket of the guest owner daemon `lmxd`.
+    pub(crate) fn owner_socket(&self) -> PathBuf {
+        self.root.join(SOCKET_PATH.trim_start_matches('/'))
     }
 
     /// Locations of the generation markers.

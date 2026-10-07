@@ -15,11 +15,16 @@ NixOS ──► /etc/lmx/config.json ──► lmx-model::Config
 person or host ──► lmx (binary) ──► lmx-facts readers ──► statvfs, /proc, uname, ip, systemctl, markers
                          │
                          ├──► lmx-model::Envelope<T> ──► text or JSON on standard output
-                         └──► the caller's terminal or tmux, the session provider
+                         ├──► the caller's terminal or tmux, the session provider
+                         └──► lmx-ipc ── gRPC, /run/lmx/lmx.sock ──► lmxd (root, systemd)
+                                                                      ├──► store guard and reserve
+                                                                      └──► Solti tasks ──► nix-store
 ```
 
 `lmx-model` holds every value that crosses a boundary: the configuration written by NixOS and the answers read by the host.
 `lmx-facts` reads the running system. The `lmx` binary parses the command line, combines facts, and renders them.
+`lmxd` owns operations that outlive a caller; `lmx` asks for them through `lmx-ipc` and reports the answer.
+Every program `lmxd` runs is a Solti task of a kind under `lmx.limanix.dev/v1`, executed by a private subprocess runner.
 Caller commands, the welcome, the clipboard and sessions, depend on the caller's terminal and environment; the welcome also reads facts.
 
 ## Boundaries to preserve
@@ -31,28 +36,37 @@ Caller commands, the welcome, the clipboard and sessions, depend on the caller's
 - Configuration comes from NixOS. The binaries never accept configuration from the host at runtime.
 - Every crate forbids unsafe Rust with `#![forbid(unsafe_code)]`.
 - Caller commands need the caller's terminal and environment, so they stay in the `lmx` process and never move into a daemon.
+- Owner operations run only in `lmxd`. `lmx` never runs them itself when the daemon is unavailable.
+- `lmx-ipc` and `lmx` do not depend on Solti; only `lmxd` does.
+- `lmxd` runs programs only as Solti tasks, never with `std::process`: tools by their absolute paths in the configuration, and `/bin/sh` for the roots report.
+- Only `lmxd` creates its tasks. The Task API on its socket reads them, and root may cancel or delete them.
 - `pbcopy`, `pbpaste` and `limanix-session` keep the syntax of the shell commands they replaced; change them together with the platform.
 
 ## Source map
 
-| Area              | Responsibility                                                 | Start here                                            |
-| ----------------- | -------------------------------------------------------------- | ----------------------------------------------------- |
-| Contract types    | Configuration, envelope, error codes, status and version       | [`lmx-model/src/lib.rs`](crates/lmx-model/src/lib.rs) |
-| Fact readers      | Disk, generations, machine, mounts, network and failed units   | [`lmx-facts/src/lib.rs`](crates/lmx-facts/src/lib.rs) |
-| Command line      | Commands, other names, output selection and exit codes         | [`lmx/src/main.rs`](crates/lmx/src/main.rs)           |
-| Status            | Collecting facts and rendering them                            | [`lmx/src/status.rs`](crates/lmx/src/status.rs)       |
-| Guest pages       | Help, info and the welcome for people in the guest             | [`lmx/src/welcome.rs`](crates/lmx/src/welcome.rs)     |
-| Terminal text     | Columns, wrapping and the palette                              | [`lmx/src/layout.rs`](crates/lmx/src/layout.rs)       |
-| Caller commands   | The clipboard through the terminal or tmux, and named sessions | [`lmx/src/clipboard.rs`](crates/lmx/src/clipboard.rs) |
-| Contract examples | Published answers of each contract version                     | [`contract/v1/`](contract/v1)                         |
+| Area              | Responsibility                                                 | Start here                                                                    |
+| ----------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Contract types    | Configuration, envelope, error codes, status and version       | [`lmx-model/src/lib.rs`](crates/lmx-model/src/lib.rs)                         |
+| Fact readers      | Disk, generations, machine, mounts, network and failed units   | [`lmx-facts/src/lib.rs`](crates/lmx-facts/src/lib.rs)                         |
+| Command line      | Commands, other names, output selection and exit codes         | [`lmx/src/main.rs`](crates/lmx/src/main.rs)                                   |
+| Status            | Collecting facts and rendering them                            | [`lmx/src/status.rs`](crates/lmx/src/status.rs)                               |
+| Guest pages       | Help, info and the welcome for people in the guest             | [`lmx/src/welcome.rs`](crates/lmx/src/welcome.rs)                             |
+| Terminal text     | Columns, wrapping and the palette                              | [`lmx/src/layout.rs`](crates/lmx/src/layout.rs)                               |
+| Caller commands   | The clipboard through the terminal or tmux, and named sessions | [`lmx/src/clipboard.rs`](crates/lmx/src/clipboard.rs)                         |
+| Owner calls       | `lmx store reserve` and the owner part of `lmx status`         | [`lmx/src/owner.rs`](crates/lmx/src/owner.rs)                                 |
+| IPC               | The `lmx.v1.Owner` protocol and its Unix-socket client         | [`lmx-ipc/proto/lmx/v1/owner.proto`](crates/lmx-ipc/proto/lmx/v1/owner.proto) |
+| Daemon            | Startup, serving the socket, systemd and the stopping order    | [`lmxd/src/main.rs`](crates/lmxd/src/main.rs)                                 |
+| Store domain      | The guard, reserve, conditions and the store tasks             | [`lmxd/src/store.rs`](crates/lmxd/src/store.rs)                               |
+| Contract examples | Published answers of each contract version                     | [`contract/v1/`](contract/v1)                                                 |
 
 Files outside `crates/` provide executable context:
 
-| Path                                      | Purpose                                                 |
-| ----------------------------------------- | ------------------------------------------------------- |
-| [`crates/lmx/tests/`](crates/lmx/tests)   | The command-line contract against a prepared guest tree |
-| [`Taskfile.yml`](Taskfile.yml)            | Checks and the release build                            |
-| [`.github/workflows/`](.github/workflows) | Pull-request checks and tag releases                    |
+| Path                                      | Purpose                                                                          |
+| ----------------------------------------- | -------------------------------------------------------------------------------- |
+| [`crates/lmx/tests/`](crates/lmx/tests)   | The command-line contract against a prepared guest tree, with and without `lmxd` |
+| [`packaging/systemd/`](packaging/systemd) | Reference units of `lmxd` for the platform                                       |
+| [`Taskfile.yml`](Taskfile.yml)            | Checks and the release build                                                     |
+| [`.github/workflows/`](.github/workflows) | Pull-request checks and tag releases                                             |
 
 ## Add a fact
 

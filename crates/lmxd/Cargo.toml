@@ -1,0 +1,32 @@
+[package]
+name         = "lmxd"
+description  = "Guest owner daemon of a LimaNix VM"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+publish = false
+
+[dependencies]
+clap         = { workspace = true }
+lmx-facts    = { workspace = true }
+lmx-ipc      = { workspace = true }
+lmx-model    = { workspace = true }
+listenfd     = { workspace = true }
+rustix       = { workspace = true, features = ["process"] }
+sd-notify    = { workspace = true }
+serde_json   = { workspace = true }
+solti        = { workspace = true, features = ["api-core-adapter", "api-grpc", "core", "exec-subprocess", "observe-journald"] }
+thiserror    = { workspace = true }
+tokio        = { workspace = true, features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-stream = { workspace = true }
+tonic        = { workspace = true }
+tracing      = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

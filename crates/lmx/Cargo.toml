@@ -13,14 +13,18 @@ publish = false
 base64        = { workspace = true }
 clap          = { workspace = true }
 lmx-facts     = { workspace = true }
+lmx-ipc       = { workspace = true }
 lmx-model     = { workspace = true }
 rustix        = { workspace = true, features = ["event", "termios"] }
 serde         = { workspace = true }
 serde_json    = { workspace = true }
+tokio         = { workspace = true, features = ["rt", "time"] }
 unicode-width = { workspace = true }
 
 [dev-dependencies]
+lmxd     = { workspace = true }
 tempfile = { workspace = true }
+tokio    = { workspace = true, features = ["net", "rt-multi-thread", "sync"] }
 
 [lints]
 workspace = true

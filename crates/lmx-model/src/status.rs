@@ -8,6 +8,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::Owner;
+
 /// Observed state of the guest.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Status {
@@ -19,6 +21,8 @@ pub struct Status {
     pub interfaces: Option<Vec<Interface>>,
     /// Names of failed systemd units.
     pub failed_units: Option<Vec<String>>,
+    /// The guest owner daemon `lmxd`, or `None` when it could not be asked.
+    pub owner: Option<Owner>,
     /// Facts or inputs that could not be read, with reasons.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub problems: Vec<Problem>,
@@ -56,6 +60,21 @@ pub struct DiskUsage {
     pub free_inodes: u64,
 }
 
+impl DiskUsage {
+    /// Whether less than `percent` of the bytes or of the inodes is free.
+    ///
+    /// The test is strict and exact: `free × 100 < total × percent`. A total of zero, such as the
+    /// inodes of a file system without an inode table, never counts as low. The platform's store
+    /// guard and the LimaNix host decide the same way.
+    #[must_use]
+    pub fn below(&self, percent: u8) -> bool {
+        let low = |free: u64, total: u64| {
+            total > 0 && u128::from(free) * 100 < u128::from(total) * u128::from(percent)
+        };
+        low(self.free_bytes, self.bytes) || low(self.free_inodes, self.inodes)
+    }
+}
+
 /// One network interface.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Interface {
@@ -79,7 +98,41 @@ pub struct Problem {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CONTRACT_VERSION, Envelope, Status};
+    use crate::{CONTRACT_VERSION, DiskUsage, Envelope, Status};
+
+    /// Usage with `free_bytes` of 1000 bytes and `free_inodes` of 1000 inodes.
+    fn usage(free_bytes: u64, free_inodes: u64) -> DiskUsage {
+        DiskUsage {
+            bytes: 1000,
+            free_bytes,
+            available_bytes: free_bytes,
+            inodes: 1000,
+            free_inodes,
+        }
+    }
+
+    #[test]
+    fn is_below_when_bytes_or_inodes_run_short() {
+        assert!(!usage(500, 500).below(20), "healthy");
+        assert!(usage(500, 150).below(20), "inodes are low");
+        assert!(usage(150, 500).below(20), "bytes are low");
+        assert!(
+            !usage(200, 200).below(20),
+            "exactly at the threshold is not below"
+        );
+        assert!(usage(199, 500).below(20));
+    }
+
+    #[test]
+    fn never_counts_a_missing_inode_table_as_low() {
+        let btrfs = DiskUsage {
+            inodes: 0,
+            free_inodes: 0,
+            ..usage(500, 0)
+        };
+        assert!(!btrfs.below(20));
+        assert!(!DiskUsage { bytes: 0, ..btrfs }.below(100));
+    }
 
     /// Published examples of contract version 1 are successful answers that decode and encode
     /// without loss.

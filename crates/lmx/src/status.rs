@@ -1,14 +1,15 @@
 //! `lmx status`: what the guest is right now.
 //!
 //! Every fact is read independently. A fact that cannot be read becomes `null` with a
-//! [`Problem`], so the host and people always get the rest.
+//! [`Problem`], so the host and people always get the rest. The owner part comes from `lmxd` when it
+//! answers within two seconds.
 
 use std::{io, process::ExitCode};
 
 use lmx_facts::{FactError, disk, generations, network, units};
 use lmx_model::{Envelope, Problem, Status};
 
-use crate::{cli::OutputArgs, format, layout, output, system::System};
+use crate::{cli::OutputArgs, format, layout, output, owner, system::System};
 
 /// Runs `lmx status`.
 pub(crate) fn run(system: &System, args: &OutputArgs) -> io::Result<ExitCode> {
@@ -50,6 +51,14 @@ pub(crate) fn collect(system: &System) -> Status {
             units::failed(&system.systemctl()),
             &mut problems,
         ),
+        owner: owner::status(&system.owner_socket())
+            .map_err(|error| {
+                problems.push(Problem {
+                    fact: "owner".into(),
+                    message: error.to_string(),
+                });
+            })
+            .ok(),
         problems,
     }
 }
@@ -116,6 +125,25 @@ pub(crate) fn render(status: &Status) -> String {
             }),
         ),
     ];
+    rows.push((
+        "Owner",
+        status.owner.as_ref().map_or_else(unknown, |owner| {
+            let doing: Vec<String> = owner
+                .operations
+                .iter()
+                .map(|operation| format!("{} {}", operation.kind, operation.phase))
+                .collect();
+            let doing = if doing.is_empty() {
+                "idle".to_owned()
+            } else {
+                doing.join(", ")
+            };
+            format!("lmxd {}, {doing}", owner.version)
+        }),
+    ));
+    for condition in status.owner.iter().flat_map(|owner| &owner.conditions) {
+        rows.push(("Condition", condition.message.clone()));
+    }
     for problem in &status.problems {
         rows.push(("Problem", format!("{}: {}", problem.fact, problem.message)));
     }
@@ -124,7 +152,7 @@ pub(crate) fn render(status: &Status) -> String {
 
 #[cfg(test)]
 mod tests {
-    use lmx_model::{DiskUsage, Generations, Interface};
+    use lmx_model::{Condition, DiskUsage, Generations, Interface, Operation, Owner};
 
     use super::*;
 
@@ -156,6 +184,19 @@ mod tests {
                 },
             ]),
             failed_units: Some(vec![]),
+            owner: Some(Owner {
+                version: "0.1.0".into(),
+                conditions: vec![Condition {
+                    kind: "DiskLow".into(),
+                    message: "Less than 10% of the guest disk is free.".into(),
+                }],
+                operations: vec![Operation {
+                    task: "store-collect-1".into(),
+                    kind: "StoreCollect".into(),
+                    phase: "running".into(),
+                    created_at: 0,
+                }],
+            }),
             problems: vec![],
         };
         assert_eq!(
@@ -163,7 +204,9 @@ mod tests {
             "Generation    desired 0123456789ab, built 0123456789ab, booted unknown\n\
              Disk          8.0 GiB of 16 GiB free, 495616 of 1048576 inodes free\n\
              Network       enp0s1 192.0.2.10\n\
-             Failed units  none\n"
+             Failed units  none\n\
+             Owner         lmxd 0.1.0, StoreCollect running\n\
+             Condition     Less than 10% of the guest disk is free.\n"
         );
     }
 
@@ -196,7 +239,7 @@ mod tests {
             ..Status::default()
         };
         let text = render(&status);
-        let problem: Vec<&str> = text.lines().skip(4).collect();
+        let problem: Vec<&str> = text.lines().skip(5).collect();
         assert_eq!(
             problem,
             [

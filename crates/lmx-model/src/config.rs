@@ -87,6 +87,9 @@ pub struct Session {
 }
 
 /// Absolute paths of the system tools the binaries run.
+///
+/// `lmxd` runs its tools with a cleared environment, and NixOS has no tools in a default `PATH`, so
+/// every tool is named by its store path.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Tools {
@@ -94,6 +97,14 @@ pub struct Tools {
     pub ip: String,
     /// `systemctl`, used for failed units.
     pub systemctl: String,
+    /// `nix-store`, used to collect unreferenced store paths and to list garbage-collector roots.
+    pub nix_store: String,
+    /// `nice` from coreutils, used to run the guard's collections at the lowest CPU priority.
+    pub nice: String,
+    /// `ionice` from util-linux, used to run the guard's collections in the idle I/O class.
+    pub ionice: String,
+    /// `grep`, used to leave the expected roots out of the garbage-collector roots report.
+    pub grep: String,
 }
 
 /// Failure to obtain a usable configuration.
@@ -163,7 +174,14 @@ mod tests {
         "modules": ["lmx:console", "lmx:go"],
         "disk": {"collect_percent": 20, "minimum_percent": 10},
         "session": {"command": null, "providers": ["lmx:tmux"]},
-        "tools": {"ip": "/run/current-system/sw/bin/ip", "systemctl": "/run/current-system/sw/bin/systemctl"}
+        "tools": {
+            "ip": "/run/current-system/sw/bin/ip",
+            "systemctl": "/run/current-system/sw/bin/systemctl",
+            "nix_store": "/run/current-system/sw/bin/nix-store",
+            "nice": "/run/current-system/sw/bin/nice",
+            "ionice": "/run/current-system/sw/bin/ionice",
+            "grep": "/run/current-system/sw/bin/grep"
+        }
     }"#;
 
     #[test]

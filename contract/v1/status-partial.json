@@ -18,10 +18,15 @@
     "failed_units": [
       "limanix-store-guard.service"
     ],
+    "owner": null,
     "problems": [
       {
         "fact": "interfaces",
         "message": "cannot run /run/current-system/sw/bin/ip: No such file or directory (os error 2)"
+      },
+      {
+        "fact": "owner",
+        "message": "lmxd is not reachable at /run/lmx/lmx.sock: No such file or directory (os error 2)"
       }
     ]
   }

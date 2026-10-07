@@ -46,26 +46,32 @@ A command that writes no answer, for example after a usage error or a lost conne
 | `apply.build_failed`   | `nixos-rebuild` failed for the requested generation                |
 | `apply.cancelled`      | The operation was cancelled by an explicit request                 |
 | `disk.low`             | Free bytes or inodes are below the platform minimum                |
+| `disk.unreadable`      | The usage of the store file system cannot be read                  |
 | `network.unreachable`  | A required destination, such as the binary cache, is unreachable   |
 | `permission.denied`    | The caller is not allowed to run the operation                     |
 | `generation.mismatch`  | The mounted inputs belong to a different generation than requested |
 | `contract.unsupported` | The caller requested a contract version this binary does not speak |
 
-`lmx status` and `lmx version` do not use these codes or the exit statuses `3` and `130`; later commands do.
+`lmx status` and `lmx version` do not use these codes or the exit statuses `3` and `130`.
+`lmx store reserve` uses exit status `3` when `lmxd` is unavailable.
 
 ## `lmx status`
 
 `data` describes the guest. Every fact is optional: an unreadable fact is `null` and its reason is listed in `problems`.
 
-| Field          | Meaning                                                                                                          |
-| -------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `generations`  | `desired` (mounted at `/mnt/limanix`), `built` (system profile), `booted` (running system)                       |
-| `disk`         | `bytes`, `free_bytes` (including the root reserve), `available_bytes`, `inodes`, `free_inodes`                   |
-| `interfaces`   | `name`, lowercase `mac` (`null` without a hardware address), and global-scope `ipv4` addresses of each interface |
-| `failed_units` | Names of failed systemd units                                                                                    |
-| `problems`     | `fact` and `message` for each fact that could not be read in full; omitted when empty                            |
+| Field          | Meaning                                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `generations`  | `desired` (mounted at `/mnt/limanix`), `built` (system profile), `booted` (running system)                                |
+| `disk`         | `bytes`, `free_bytes` (including the root reserve), `available_bytes`, `inodes`, `free_inodes`                            |
+| `interfaces`   | `name`, lowercase `mac` (`null` without a hardware address), and global-scope `ipv4` addresses of each interface          |
+| `failed_units` | Names of failed systemd units                                                                                             |
+| `owner`        | The guest owner daemon: `version`, `conditions` (`type`, `message`), `operations` (`task`, `kind`, `phase`, `created_at`) |
+| `problems`     | `fact` and `message` for each fact that could not be read in full; omitted when empty                                     |
 
 A problem's `fact` names the field that is `null` or incomplete, or is `config` when `/etc/lmx/config.json` cannot be read.
+`owner` is `null` with an `owner` problem when `lmxd` does not answer within two seconds; the other facts are still answered.
+Its conditions are computed when it is asked: `DiskLow` means less than the platform minimum of the store disk is free.
+An operation's `created_at` is when it was requested, in Unix milliseconds.
 Without the configuration, `ip` and `systemctl` are looked up in `PATH`, so a `config` problem marks a degraded answer.
 
 A generation is `null` when its stage has no valid marker, for example on a system built before `lmx` existed.
@@ -73,6 +79,25 @@ A marker that exists but cannot be read also gives `null` and adds a `generation
 The host compares the three generations to tell whether a build or a restart is still needed.
 
 Examples: [complete](../contract/v1/status.json), [partial](../contract/v1/status-partial.json).
+
+## `lmx store reserve`
+
+Root only. The host runs it before it stops a running VM for an update.
+`lmxd` collects unreferenced store paths when less than the collect threshold (20%) of the store disk is free, and waits for the collection; a collection already running is shared.
+Interrupting the command does not stop the collection.
+
+`data` has `before` and `after`, store disk usage objects as in `lmx status`, `freed_bytes`, and `collected`.
+
+| Error code          | When                                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `disk.low`          | Less than the platform minimum (10%) is still free afterwards; `details` has `before`, `after`, `freed_bytes`, and `collect_error` when the collection failed |
+| `disk.unreadable`   | The usage of the store file system cannot be read                                                                                                             |
+| `permission.denied` | The caller is not root                                                                                                                                        |
+| `owner.unavailable` | `lmxd` cannot be reached; exit status `3`                                                                                                                     |
+
+The host treats `disk.low` as a warning: the update may still succeed.
+
+Examples: [enough room](../contract/v1/store-reserve.json), [disk low](../contract/v1/store-reserve-disk-low.json).
 
 ## `lmx version`
 

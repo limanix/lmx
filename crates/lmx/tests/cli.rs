@@ -114,7 +114,14 @@ impl Guest {
             "modules": [],
             "disk": {"collect_percent": 20, "minimum_percent": 10},
             "session": {"command": null, "providers": []},
-            "tools": {"ip": tools.ip, "systemctl": tools.systemctl}
+            "tools": {
+                "ip": tools.ip,
+                "systemctl": tools.systemctl,
+                "nix_store": "/run/current-system/sw/bin/nix-store",
+                "nice": "/run/current-system/sw/bin/nice",
+                "ionice": "/run/current-system/sw/bin/ionice",
+                "grep": "/run/current-system/sw/bin/grep"
+            }
         });
         guest.write("etc/lmx/config.json", &config.to_string());
         guest
@@ -283,9 +290,15 @@ fn status_json_answers_the_host_contract() {
         json!([{"name": "enp0s1", "mac": "52:55:55:aa:bb:cc", "ipv4": ["192.0.2.10"]}])
     );
     assert_eq!(data["failed_units"], json!(["limanix-store-guard.service"]));
+    // No lmxd runs in this guest: the owner is the only fact that cannot be read.
+    assert_eq!(data["owner"], Value::Null);
+    assert_eq!(data["problems"].as_array().map(Vec::len), Some(1), "{data}");
+    assert_eq!(data["problems"][0]["fact"], "owner");
     assert!(
-        data.get("problems").is_none(),
-        "every fact was read: {data}"
+        data["problems"][0]["message"]
+            .as_str()
+            .is_some_and(|message| message.starts_with("lmxd is not reachable at ")),
+        "{data}"
     );
 }
 
@@ -315,7 +328,13 @@ fn status_reports_missing_facts_without_failing() {
         .collect();
     assert_eq!(
         facts,
-        ["config", "generations", "interfaces", "failed_units"]
+        [
+            "config",
+            "generations",
+            "interfaces",
+            "failed_units",
+            "owner"
+        ]
     );
 }
 
@@ -345,8 +364,18 @@ fn status_names_an_unreadable_disk() {
         .as_array()
         .expect("problems are listed");
     assert_eq!(answer["data"]["disk"], Value::Null);
-    assert_eq!(problems.len(), 1, "{problems:?}");
-    assert_eq!(problems[0]["fact"], "disk");
+    let facts: Vec<&Value> = problems.iter().map(|problem| &problem["fact"]).collect();
+    assert_eq!(facts, ["disk", "owner"], "{problems:?}");
+}
+
+#[test]
+fn store_reserve_without_lmxd_reports_an_unavailable_owner() {
+    let guest = Guest::new();
+    let output = guest.lmx(&["store", "reserve", "--json"], &guest.config());
+    assert_eq!(output.status.code(), Some(3), "{output:?}");
+    let answer: Value = serde_json::from_slice(&output.stdout).expect("one JSON answer");
+    assert_eq!(answer["ok"], false);
+    assert_eq!(answer["error"]["code"], "owner.unavailable");
 }
 
 #[test]
