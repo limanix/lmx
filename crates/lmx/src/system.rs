@@ -10,7 +10,10 @@ use std::{
 };
 
 use lmx_facts::{
-    disk::STORE_PATH, generations::GenerationPaths, machine::MEMINFO_PATH, mounts::MOUNTINFO_PATH,
+    disk::STORE_PATH,
+    generations::{GenerationPaths, PROFILES_PATH},
+    machine::{MEMINFO_PATH, UPTIME_PATH},
+    mounts::MOUNTINFO_PATH,
     sockets::PROC_PATH,
 };
 use lmx_ipc::SOCKET_PATH;
@@ -64,6 +67,18 @@ impl System {
     /// Memory information.
     pub(crate) fn meminfo(&self) -> PathBuf {
         self.root.join(MEMINFO_PATH.trim_start_matches('/'))
+    }
+
+    /// Uptime information.
+    pub(crate) fn uptime(&self) -> PathBuf {
+        self.root.join(UPTIME_PATH.trim_start_matches('/'))
+    }
+
+    /// The system profile, a link to the current system generation.
+    pub(crate) fn system_profile(&self) -> PathBuf {
+        self.root
+            .join(PROFILES_PATH.trim_start_matches('/'))
+            .join("system")
     }
 
     /// The process file system.

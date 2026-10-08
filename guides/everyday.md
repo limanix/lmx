@@ -7,9 +7,34 @@ These commands work in any guest shell. None of them needs `sudo`, although
 
 `lmx help` shows the VM, your account, the selected modules, and the commands
 inside the VM and on the Mac. `lmx welcome` shows the summary that greets you
-when a shell starts: the VM, its resources, modules and shared folders, plus
-warnings when services failed or the disk runs low. `lmx info` adds the kernel,
-the guest disk, the shared folders and failed services.
+under the LimaNix logo when a shell starts:
+
+```console
+$ lmx welcome
+  ● ready    generation 0123456, updated 2 days ago
+
+  VM         dev-box (NixOS 26.05, arm64), up 3 h
+  Resources  4 CPUs, 7.6 GiB memory
+  Disk       ████████████░░░░░░░░  60% free, 39 of 64 GiB
+  Network    192.168.105.4, ports tcp 8080 and 5432
+  Modules    go, docker, python-3.12
+  Shared     /home/dev  rw
+
+  tip  lmx help go shows what the go module gives you.
+  lmx help for commands, lmx status for details, exit to return to the Mac.
+```
+
+When something needs you, the first line becomes one line per problem, each with
+the command that helps, and the tip goes away:
+
+```console
+  ▲ failed   postgresql.service; run systemctl status postgresql.service
+  ▲ disk low 8% of space free on the guest disk; run sudo lmx store reserve
+  ▲ restart  generation 4a1f9c2 is built; run limanix update on the Mac
+```
+
+`lmx info` adds the kernel, the guest disk, the shared folders and failed
+services.
 
 ## What did a module give me?
 
