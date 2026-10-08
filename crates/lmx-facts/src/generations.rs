@@ -17,6 +17,7 @@ use std::{
     ffi::OsStr,
     fs, io,
     path::{Path, PathBuf},
+    time::SystemTime,
 };
 
 use lmx_model::Generations;
@@ -116,6 +117,18 @@ pub fn system_generations(profiles: &Path) -> Result<usize, FactError> {
     Ok(count)
 }
 
+/// When the system profile `profile` last moved to another generation.
+///
+/// Switching the profile replaces its link, and the new link's time is the time of the switch.
+pub fn profile_changed(profile: &Path) -> Result<SystemTime, FactError> {
+    fs::symlink_metadata(profile)
+        .and_then(|metadata| metadata.modified())
+        .map_err(|source| FactError::Io {
+            what: "the system profile",
+            source,
+        })
+}
+
 /// Whether `name` is a `system-<number>-link`.
 fn is_generation(name: &OsStr) -> bool {
     name.to_str()
@@ -148,6 +161,16 @@ mod tests {
     fn write(path: &Path, content: &str) {
         fs::create_dir_all(path.parent().expect("marker has a parent")).expect("create parent");
         fs::write(path, content).expect("write marker");
+    }
+
+    #[test]
+    fn dates_the_system_profile_by_its_link() {
+        let profiles = tempfile::tempdir().expect("temporary directory");
+        let profile = profiles.path().join("system");
+        std::os::unix::fs::symlink("system-2-link", &profile).expect("link the profile");
+        let changed = profile_changed(&profile).expect("the link has a time");
+        assert!(changed <= SystemTime::now());
+        assert!(profile_changed(&profiles.path().join("missing")).is_err());
     }
 
     #[test]

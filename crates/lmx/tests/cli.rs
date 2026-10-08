@@ -575,22 +575,25 @@ fn info_fails_when_a_part_cannot_be_read() {
 #[test]
 fn welcome_summarizes_the_vm() {
     let guest = Guest::new();
+    guest.write("proc/uptime", "10920.52 41200.10\n");
     let output = guest.lmx(&["welcome"], &guest.config());
     let text = String::from_utf8(output.stdout).expect("UTF-8 text");
     assert!(output.status.success(), "{text}");
     assert!(!text.contains('\x1b'), "a pipe gets no colors: {text:?}");
+    for line in [
+        "  ▲ owner    lmxd does not answer; run lmx doctor\n",
+        "  ▲ failed   limanix-store-guard.service; run systemctl --failed\n",
+        "  VM         dev-box (NixOS 26.05, arm64), up 3 h\n",
+        "  Network    192.0.2.10, ports tcp 8080\n",
+        "  Modules    none\n",
+        "  Shared     /home/dev     rw\n             /mnt/limanix  ro\n",
+    ] {
+        assert!(text.contains(line), "{line}{text}");
+    }
+    assert!(text.contains(", 7.6 GiB memory\n"), "{text}");
     assert!(
-        text.contains("  VM         dev-box (NixOS 26.05, arm64)\n"),
-        "{text}"
-    );
-    assert!(text.contains(", 7.6 GiB memory, "), "{text}");
-    assert!(
-        text.contains("  Shared     /home/dev     rw\n             /mnt/limanix  ro\n"),
-        "{text}"
-    );
-    assert!(
-        text.contains("  ▲ Failed: limanix-store-guard.service. Run lmx info for details.\n"),
-        "{text}"
+        !text.contains("  tip  "),
+        "attention replaces the tip: {text}"
     );
 }
 

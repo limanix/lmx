@@ -1,11 +1,14 @@
-//! The virtual machine itself: processors, memory and kernel.
+//! The virtual machine itself: processors, memory, uptime and kernel.
 
-use std::{fs, path::Path, thread};
+use std::{fs, path::Path, thread, time::Duration};
 
 use crate::FactError;
 
 /// Memory information inside a booted guest.
 pub const MEMINFO_PATH: &str = "/proc/meminfo";
+
+/// Uptime information inside a booted guest.
+pub const UPTIME_PATH: &str = "/proc/uptime";
 
 /// Number of processors the caller may use.
 pub fn cpus() -> Result<usize, FactError> {
@@ -36,6 +39,27 @@ pub fn parse_memory(info: &str) -> Result<u64, FactError> {
         .ok_or_else(|| FactError::Parse {
             what: "memory information",
             detail: "no MemTotal line in kB".into(),
+        })
+}
+
+/// Reads how long the guest has run from the uptime information at `path`.
+pub fn uptime(path: &Path) -> Result<Duration, FactError> {
+    let info = fs::read_to_string(path).map_err(|source| FactError::Io {
+        what: "uptime information",
+        source,
+    })?;
+    parse_uptime(&info)
+}
+
+/// Parses the first field of `/proc/uptime`: seconds since boot, with a fraction.
+pub fn parse_uptime(info: &str) -> Result<Duration, FactError> {
+    info.split_whitespace()
+        .next()
+        .and_then(|seconds| seconds.parse::<f64>().ok())
+        .and_then(|seconds| Duration::try_from_secs_f64(seconds).ok())
+        .ok_or_else(|| FactError::Parse {
+            what: "uptime information",
+            detail: "no seconds since boot".into(),
         })
 }
 
@@ -79,6 +103,16 @@ mod tests {
                 .starts_with("cannot read memory information: "),
             "{error}"
         );
+    }
+
+    #[test]
+    fn reads_seconds_since_boot() {
+        assert_eq!(
+            parse_uptime("10800.52 41200.10\n").expect("uptime"),
+            Duration::from_millis(10_800_520)
+        );
+        assert!(parse_uptime("").is_err());
+        assert!(parse_uptime("-1 0\n").is_err());
     }
 
     #[test]
