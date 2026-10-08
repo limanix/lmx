@@ -1,8 +1,6 @@
 version: 2
 
 updates:
-  # Workflows pin third-party actions by commit SHA; Dependabot moves the SHA and the version
-  # comment together.
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -10,5 +8,15 @@ updates:
     groups:
       github-actions:
         patterns: ['*']
+    labels:
+      - deps
+
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      cargo:
+        update-types: [minor, patch]
     labels:
       - deps

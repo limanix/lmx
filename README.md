@@ -19,12 +19,14 @@ filling the disk and carries out updates from build to finalize.
 
 ## Get started
 
-`lmx` comes with every LimaNix VM; there is nothing to install. Open a guest
-shell on your Mac and ask it:
+`lmx` comes with every LimaNix VM; there is nothing to install. New to LimaNix?
+Start with
+[Getting started](https://limanix.dev/categories/client/getting-started.html).
+Open a guest shell on your Mac and ask it:
 
 ```console
-limanix shell dev-box
-lmx help
+limanix shell dev-box   # on the Mac: open a shell in the VM
+lmx help                # in the guest
 ```
 
 `lmx status` shows how the guest is doing, and `lmx doctor` tells you what is
@@ -55,5 +57,3 @@ when changing `lmx`. See [Development](guides/development.md) and
 [Taskfile.yml](Taskfile.yml) for local checks, release builds and documentation
 tasks. Use [Issues](https://github.com/limanix/lmx/issues) for questions, bug
 reports and feature requests.
-
-Licensed under [Apache 2.0](LICENSE).

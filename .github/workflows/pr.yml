@@ -13,18 +13,6 @@ permissions:
   contents: read
 
 jobs:
-  rust:
-    uses: mr-chelyshkin/actions/.github/workflows/pr-rust.yml@v1
-    permissions:
-      contents: read
-    with:
-      cache-path: .cache/rust
-      cache-key-prefix: lmx-rust-v1
-      cache-dependency-path: |
-        Cargo.lock
-        Cargo.toml
-        rust-toolchain.toml
-
   markdown:
     name: Markdown formatting
     runs-on: ubuntu-24.04
@@ -37,8 +25,33 @@ jobs:
         with:
           command: ci/markdown/fmt
 
+  docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: mr-chelyshkin/actions/invoke-taskfile@v1
+        with:
+          command: docs/prepare
+
+  rust:
+    needs: [markdown, docs]
+    uses: mr-chelyshkin/actions/.github/workflows/pr-rust.yml@v1
+    permissions:
+      contents: read
+    with:
+      cache-path: .cache/rust
+      cache-key-prefix: lmx-rust-v1
+      cache-dependency-path: |
+        Cargo.lock
+        Cargo.toml
+        rust-toolchain.toml
+
   release:
     name: Release build (${{ matrix.arch }})
+    needs: rust
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -61,20 +74,9 @@ jobs:
         with:
           command: release/build ARCH=${{ matrix.arch }}
 
-  docs:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-      - uses: mr-chelyshkin/actions/invoke-taskfile@v1
-        with:
-          command: docs/prepare
-
   gate:
     if: always()
-    needs: [rust, markdown, docs, release]
+    needs: [markdown, docs, rust, release]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
