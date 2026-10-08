@@ -16,10 +16,10 @@ pub struct Owner {
 /// A condition of the guest that needs attention.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Condition {
-    /// Stable name, such as `DiskLow`.
+    /// Stable name.
     #[serde(rename = "type")]
     pub kind: String,
-    /// Explanation for people.
+    /// Explanation.
     pub message: String,
 }
 

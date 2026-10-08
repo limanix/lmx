@@ -26,8 +26,8 @@ pub enum OutputStream {
     Stderr,
 }
 
-/// One event of `lmx apply --follow --json`; the contract envelope with the outcome follows the last
-/// one.
+/// One event of `lmx apply --follow --json`; the contract envelope with the outcome follows the
+/// last one.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum ApplyEvent {
@@ -46,7 +46,7 @@ pub enum ApplyEvent {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         truncated: bool,
     },
-    /// A problem that does not stop the apply, such as a low disk.
+    /// A problem that does not stop to apply.
     Warning {
         /// Code of the problem.
         code: ErrorCode,
@@ -101,7 +101,6 @@ pub struct BuildFailure {
 mod tests {
     use crate::{Apply, ApplyEvent, BuildFailure, CONTRACT_VERSION, Envelope, ErrorCode};
 
-    /// The published apply examples decode and encode without loss.
     #[test]
     fn contract_examples_round_trip() {
         let example = include_str!("../../../contract/v1/apply-restart-required.json");
@@ -121,7 +120,6 @@ mod tests {
         assert_eq!(serde_json::to_value(&envelope).expect("encode"), original);
     }
 
-    /// Every line of the follow example but the last is an event; the last is the envelope.
     #[test]
     fn follow_example_is_events_then_an_envelope() {
         let example = include_str!("../../../contract/v1/apply-follow.jsonl");

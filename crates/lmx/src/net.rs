@@ -161,7 +161,7 @@ fn listener(listeners: &Result<Vec<Listener>, FactError>, port: u16, protocol: P
             "listener",
             CheckStatus::Failed,
             format!(
-                "{name} {port} listens on {shown} only, so it is reachable only inside the guest."
+                "{name} {port} listens on {shown} only and is reachable only inside the guest."
             ),
         )
         .hint("Make the application listen on 0.0.0.0 or the guest address.")
@@ -271,7 +271,6 @@ fn user_name(system: &System, uid: u32) -> String {
 mod tests {
     use super::*;
 
-    /// Declared ports.
     fn ports(tcp: &[u16], udp: &[u16]) -> Ports {
         Ports {
             tcp: tcp.to_vec(),
@@ -279,7 +278,6 @@ mod tests {
         }
     }
 
-    /// A listener on `address`.
     fn on(address: [u8; 4]) -> Listener {
         Listener {
             address: IpAddr::from(address),
@@ -313,7 +311,7 @@ mod tests {
         assert_eq!(loopback.status, CheckStatus::Failed);
         assert_eq!(
             loopback.message,
-            "TCP 8080 listens on 127.0.0.1 only, so it is reachable only inside the guest."
+            "TCP 8080 listens on 127.0.0.1 only and is reachable only inside the guest."
         );
         assert_eq!(
             status(vec![on([127, 0, 0, 1]), on([0, 0, 0, 0])]).status,

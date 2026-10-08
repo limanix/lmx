@@ -1,8 +1,8 @@
 //! Task output in the journal.
 //!
 //! Every line carries the fields `LMX_TASK` and `LMX_KIND`, such as `system-apply-3` and
-//! `SystemApply`, so `lmx logs` finds the runs of a kind, also after a reboot. `lmxd` writes its
-//! journal fields without a prefix.
+//! `SystemApply`, by which `lmx logs` finds the runs of a kind, also after a reboot. `lmxd`
+//! writes its journal fields without a prefix.
 
 use solti::{
     core::{TaskOutputEvent, TaskOutputSink},
@@ -11,7 +11,7 @@ use solti::{
 
 use crate::tasks::Kind;
 
-/// Logs every output line of every task, so `journalctl -u lmx` shows what the tasks printed, as
+/// Logs every output line of every task: `journalctl -u lmx` shows what the tasks printed, as
 /// `journalctl -u limanix-store-guard` showed the platform guard's output.
 #[derive(Debug)]
 pub(crate) struct Journal;

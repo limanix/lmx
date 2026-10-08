@@ -1,7 +1,4 @@
 //! Usage of the file system that holds the Nix store.
-//!
-//! The store, the system and service data share the guest's root file system; the home directory is
-//! a host mount and is not counted.
 
 use std::path::Path;
 

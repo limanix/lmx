@@ -58,7 +58,7 @@ It replaces the platform's store guard, its timer, the daily `nix-gc` timer, and
 - `lmx store reserve` does the same at once for the host and answers with the usage before and after;
 - `lmx apply` installs the environment files of the generation the host mounted, makes room in the store and runs `nixos-rebuild boot`; a caller that disconnects leaves the apply running, and asking again attaches to it;
 - after the restart into a new generation, it checks the platform units, the shared folders and a login shell of the development account, then removes the older generations and rewrites the boot entries;
-- every operation is a Solti task, so its output reaches the journal (`journalctl -u lmx`).
+- every operation is a Solti task with its output in the journal (`journalctl -u lmx`).
 
 For an update, the host stops the system daemon and starts one from the mounted generation with `lmxd --transient`, which applies but neither guards the store nor finalizes.
 A daemon never takes over a socket that another daemon still serves.
@@ -78,7 +78,7 @@ Reference units are in [`packaging/systemd/`](packaging/systemd).
 ## Development
 
 Requirements: [Task](https://taskfile.dev/docs/installation) 3.53.1+, Git and Docker.
-Tasks run Cargo in the [`ci/rust`](https://github.com/mr-chelyshkin/images) image, so CI and local checks use one toolchain.
+CI and local checks use one toolchain: tasks run Cargo in the [`ci/rust`](https://github.com/mr-chelyshkin/images) image.
 
 | Task                   | Does                                                      |
 | ---------------------- | --------------------------------------------------------- |

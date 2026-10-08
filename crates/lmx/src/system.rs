@@ -1,7 +1,8 @@
 //! Locations and configuration of the running guest.
 //!
-//! Without a readable configuration, `ip` and `systemctl` are looked up in `PATH`, so `lmx status`
-//! still reports interfaces and failed units; its `config` problem marks the answer as degraded.
+//! Without a readable configuration, `ip` and `systemctl` are looked up in `PATH`, and
+//! `lmx status` still reports interfaces and failed units; its `config` problem marks the answer
+//! as degraded.
 
 use std::{
     env,

@@ -1,8 +1,4 @@
 //! Records of `lmxd` tasks in the system journal, read with `journalctl -o json`.
-//!
-//! `lmxd` writes the output of its tasks with the fields `LMX_TASK` and `LMX_KIND`, and apply events
-//! also with `LMX_GENERATION`. The journal is readable by root and the groups `wheel`, `adm` and
-//! `systemd-journal`; other users see none of these records.
 
 use std::{path::Path, time::Duration};
 
@@ -39,9 +35,6 @@ pub enum Boot {
 
 /// Records of the task kind `kind` in `boot`, in the order they were written, and whether the
 /// journal of the system was readable to the caller.
-///
-/// Only records of root count, since any user may write a record with `LMX_KIND`. A boot that the
-/// journal does not have has no records.
 pub fn records(
     journalctl: &Path,
     kind: &str,
@@ -67,7 +60,6 @@ pub fn records(
         TIMEOUT,
     );
     let (output, errors) = match answer {
-        // journalctl fails when it can open no journal, or when the boot is not in it.
         Err(FactError::Command { stderr, .. }) if unreadable(&stderr) => {
             return Ok((Vec::new(), false));
         }

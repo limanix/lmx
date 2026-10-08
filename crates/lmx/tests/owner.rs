@@ -1,11 +1,5 @@
 //! `lmx` with a running `lmxd`: the owner part of `status`, `store reserve`, `apply` and the wait for
 //! a converged generation.
-//!
-//! Each test starts `lmxd` in this process on the socket of a prepared guest tree, which is also the
-//! daemon's system root. The store disk is read from a file, and a fake `nix-store` rewrites that
-//! file when it collects, so a test decides what a collection frees. Fake `nixos-rebuild`, `nix-env`,
-//! `switch-to-configuration`, `systemctl` and `sudo` log their calls and change the tree as the real
-//! ones change the system.
 
 use std::{
     fs,
@@ -22,9 +16,6 @@ use lmxd::{Daemon, GuardSchedule, ObserverSchedule, Options, UsageSource};
 use serde_json::{Value, json};
 use tokio::{net::UnixListener, runtime::Runtime, sync::oneshot, task::JoinHandle};
 
-/// Fake `nix-store`. It logs its arguments next to the guest tree's `bin`. A collection takes two
-/// seconds, so concurrent callers overlap, and then turns the disk into `disk-after.json`. A roots
-/// listing prints a root the report leaves out and one it keeps.
 const NIX_STORE: &str = r#"#!/bin/sh
 root=$(dirname "$(dirname "$0")")
 printf '%s\n' "$*" >> "$root/calls"
@@ -36,10 +27,6 @@ case "$*" in
 esac
 "#;
 
-/// Fake `nixos-rebuild`. A build's `PATH` holds no tools in the tree, so it uses shell builtins and
-/// absolute paths. It logs its call and prints a line on each stream; the stdout line shows a variable
-/// of the user's environment. Then it does what the file `build` says: `fail` exits with status 1,
-/// `hang` sleeps until it is killed, and anything else makes the mounted generation the built one.
 const NIXOS_REBUILD: &str = r#"#!/bin/sh
 root=${0%/bin/*}
 printf 'nixos-rebuild %s\n' "$*" >> "$root/calls"
@@ -59,8 +46,6 @@ printf 'nix-env %s\n' "$*" >> "$root/calls"
 /bin/rm -f "$2-1-link"
 "#;
 
-/// Fake `switch-to-configuration` inside the system profile: logs its call, and fails when the file
-/// `finalize` says `fail`.
 const SWITCH_TO_CONFIGURATION: &str = r#"#!/bin/sh
 root=${0%/nix/var/nix/profiles/system/bin/*}
 printf 'switch-to-configuration %s\n' "$*" >> "$root/calls"
@@ -70,13 +55,11 @@ if [ "$(/bin/cat "$root/finalize" 2>/dev/null)" = fail ]; then
 fi
 "#;
 
-/// Fake `systemctl`: logs its call; every unit is active.
 const SYSTEMCTL: &str = r#"#!/bin/sh
 root=${0%/bin/*}
 printf 'systemctl %s\n' "$*" >> "$root/calls"
 "#;
 
-/// Fake `systemd-run`: logs its call, drops its options and runs the command in place.
 const SYSTEMD_RUN: &str = r#"#!/bin/sh
 root=${0%/bin/*}
 printf 'systemd-run %s\n' "$*" >> "$root/calls"
@@ -84,19 +67,16 @@ while [ "${1#--}" != "$1" ]; do shift; done
 exec "$@"
 "#;
 
-/// Fake `sudo`: logs the account it was asked to run a command as.
 const SUDO: &str = r#"#!/bin/sh
 root=${0%/bin/*}
 printf 'sudo %s %s %s\n' "$1" "$2" "$3" >> "$root/calls"
 "#;
 
-/// Mount table with the generation inputs and the development account's home.
 const MOUNTINFO: &str = "\
 35 1 0:30 / /mnt/limanix ro,relatime - virtiofs mount0 ro
 36 1 0:31 / /home/dev rw,relatime - virtiofs mount1 rw
 ";
 
-/// Fake `nice` or `ionice`: logs its name and arguments, drops its two options and runs the rest.
 fn priority_tool(name: &str) -> String {
     format!(
         r#"#!/bin/sh
@@ -108,7 +88,6 @@ exec "$@"
     )
 }
 
-/// A 1000 MiB store disk with `free_percent` of its bytes free and plenty of inodes.
 fn usage(free_percent: u64) -> DiskUsage {
     DiskUsage {
         bytes: 1000 << 20,
@@ -119,25 +98,18 @@ fn usage(free_percent: u64) -> DiskUsage {
     }
 }
 
-/// A guest tree with `lmxd` serving its socket.
 struct Guest {
-    /// Root replacing `/`; removed when the test ends.
     root: tempfile::TempDir,
-    /// Runtime of the daemon.
     runtime: Runtime,
-    /// Stops the daemon.
     stop: Option<oneshot::Sender<()>>,
-    /// The serving daemon.
     served: Option<JoinHandle<Result<(), lmxd::Error>>>,
 }
 
 impl Guest {
-    /// A guest whose store disk is `before` until a collection makes it `after`.
     fn new(before: DiskUsage, after: DiskUsage) -> Self {
         Self::start(before, after, None, None)
     }
 
-    /// A guest with plenty of room and a generation observer that looks every 200 milliseconds.
     fn observed() -> Self {
         let observer = ObserverSchedule {
             first: Duration::ZERO,
@@ -147,7 +119,6 @@ impl Guest {
         Self::start(usage(50), usage(50), None, Some(observer))
     }
 
-    /// Like [`Guest::new`], with a store guard that checks the disk at once.
     fn with_guard(before: DiskUsage, after: DiskUsage) -> Self {
         let guard = GuardSchedule {
             first: Duration::ZERO,
@@ -156,7 +127,6 @@ impl Guest {
         Self::start(before, after, Some(guard), None)
     }
 
-    /// Prepares the tree and starts `lmxd` with `guard` and `observer`.
     fn start(
         before: DiskUsage,
         after: DiskUsage,
@@ -183,7 +153,6 @@ impl Guest {
         ] {
             executable(&path(&format!("bin/{tool}")), &script);
         }
-        // The environment files get the group of the tree, which the test user may give them.
         let gid = fs::metadata(root.path()).expect("tree metadata").gid();
 
         let config = json!({
@@ -247,7 +216,6 @@ impl Guest {
         }
     }
 
-    /// Prepares `lmx` with the tree as its system root.
     fn lmx(&self, args: &[&str]) -> Command {
         let mut command = Command::new(env!("CARGO_BIN_EXE_lmx"));
         command
@@ -260,20 +228,16 @@ impl Guest {
         command
     }
 
-    /// Path of `relative` below the root.
     fn path(&self, relative: &str) -> PathBuf {
         self.root.path().join(relative)
     }
 
-    /// Writes `content` to `relative` below the root.
     fn write(&self, relative: &str, content: &str) {
         let path = self.path(relative);
         fs::create_dir_all(path.parent().expect("file has a parent")).expect("create parent");
         fs::write(path, content).expect("write file");
     }
 
-    /// Mounts generation `desired` with its environment files over a system that built `built` and
-    /// booted `booted`, keeping `kept` generations in the system profile.
     fn mount(&self, desired: &str, built: &str, booted: &str, kept: usize) {
         let marker = |generation: &str| json!({"generation": generation}).to_string();
         self.write("mnt/limanix/flake/runtime.json", &marker(desired));
@@ -300,7 +264,6 @@ impl Guest {
         self.write("proc/self/mountinfo", MOUNTINFO);
     }
 
-    /// Waits up to 20 seconds until a logged call starts with `prefix`.
     fn wait_for_call(&self, prefix: &str) {
         let deadline = Instant::now() + Duration::from_secs(20);
         while !self.calls().iter().any(|call| call.starts_with(prefix)) {
@@ -313,7 +276,6 @@ impl Guest {
         }
     }
 
-    /// Every call the fake tools logged so far; `nix-store` logs only its arguments.
     fn calls(&self) -> Vec<String> {
         fs::read_to_string(self.path("calls"))
             .unwrap_or_default()
@@ -334,14 +296,12 @@ impl Drop for Guest {
     }
 }
 
-/// Writes an executable script at `path`.
 fn executable(path: &Path, script: &str) {
     fs::create_dir_all(path.parent().expect("script has a parent")).expect("create parent");
     fs::write(path, script).expect("write a script");
     fs::set_permissions(path, fs::Permissions::from_mode(0o755)).expect("make it executable");
 }
 
-/// Parses standard output as JSON Lines: the events of `apply --follow`, then the envelope.
 fn json_lines(output: &Output) -> Vec<Value> {
     String::from_utf8_lossy(&output.stdout)
         .lines()
@@ -349,7 +309,6 @@ fn json_lines(output: &Output) -> Vec<Value> {
         .collect()
 }
 
-/// Parses standard output as one JSON answer, whatever the exit status.
 fn answer(output: &Output) -> Value {
     serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
         panic!(
@@ -480,7 +439,6 @@ fn an_apply_installs_the_environment_and_builds_for_the_next_boot() {
         0o640
     );
 
-    // Built now: asking again needs only a restart, and status says so.
     let again = guest
         .lmx(&["apply", "-g", "g2", "--json"])
         .output()

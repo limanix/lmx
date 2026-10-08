@@ -39,7 +39,7 @@ pub fn parse_memory(info: &str) -> Result<u64, FactError> {
         })
 }
 
-/// Kernel name and release, such as `Linux 6.12.5`.
+/// Kernel name and release.
 pub fn kernel() -> String {
     let name = rustix::system::uname();
     format!(

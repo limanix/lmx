@@ -45,7 +45,6 @@ pub(crate) fn converged(
     json: bool,
 ) -> io::Result<ExitCode> {
     let socket = system.owner_socket();
-    // A timeout beyond the clock's range is no deadline at all.
     let deadline = Instant::now().checked_add(timeout);
     let mut owner = None;
     let mut unanswered = CallError::Unavailable("lmxd did not answer".into());
@@ -138,7 +137,6 @@ fn report(json: bool, error: ErrorBody, owner: &Owner) -> io::Result<ExitCode> {
     let message = error.message.clone();
     let status = output::failure(json, error, output::FAILURE)?;
     if !json {
-        // The error already says what its own condition says.
         for condition in owner
             .conditions
             .iter()

@@ -1,7 +1,8 @@
 //! # lmx
 //!
-//! Command of the LimaNix guest owner. People run it inside the VM; the LimaNix host runs it over
-//! management SSH with `--json` and reads the [host contract](https://github.com/limanix/lmx/blob/main/docs/contract.md).
+//! Command of the LimaNix guest owner. Run it inside the VM; the LimaNix host runs it over
+//! management SSH with `--json` and reads the
+//! [host contract](https://github.com/limanix/lmx/blob/main/docs/contract.md).
 //!
 //! | Command               | Kind   | Answers or does                                             |
 //! |-----------------------|--------|-------------------------------------------------------------|
@@ -25,7 +26,7 @@
 //! `lmx status --wait converged -g G` is one too: it answers once `lmxd` reports generation G
 //! settled after a restart. `lmx status --short` prints only what needs attention, for tmux and the
 //! prompt, and never waits more than 200 ms. Caller commands act on the caller's terminal and
-//! environment, so only the caller can run them.
+//! environment, and only the caller can run them.
 //!
 //! ## Other names
 //!
@@ -40,8 +41,8 @@
 //!
 //! ## Test hooks
 //!
-//! Environment variables let tests point the binary at prepared files. `sudo` drops all of them by
-//! default, so the host never sets them by accident.
+//! Environment variables let tests point the binary at prepared files. The host never sets them by
+//! accident: `sudo` drops all of them by default.
 //!
 //! | Variable            | Replaces                                                                  |
 //! |---------------------|---------------------------------------------------------------------------|
@@ -110,8 +111,6 @@ fn main() -> ExitCode {
 
     match result {
         Ok(code) => code,
-        // Standard output was closed by its reader, as in `lmx status | true`: nobody is left to
-        // read an answer or an error. clap ends `--help` the same way.
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("lmx: {error}");
@@ -122,8 +121,6 @@ fn main() -> ExitCode {
 
 /// Runs `lmx` with the arguments after the program name.
 fn lmx(mut arguments: Vec<OsString>) -> io::Result<ExitCode> {
-    // `lmx --help` and `lmx -h` are `lmx help`, so further arguments stay usage errors, as in the
-    // platform's shell `lmx`; `lmx status --help` stays generated.
     if let Some(first) = arguments.first_mut()
         && matches!(first.to_str(), Some("--help" | "-h"))
     {

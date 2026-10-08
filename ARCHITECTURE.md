@@ -37,12 +37,12 @@ Caller commands, the welcome, the clipboard and sessions, depend on the caller's
 - The host contract changes only as described in [Change the host contract](docs/contract.md#change-the-host-contract).
 - Configuration comes from NixOS. The binaries never accept configuration from the host at runtime.
 - Every crate forbids unsafe Rust with `#![forbid(unsafe_code)]`.
-- Caller commands need the caller's terminal and environment, so they stay in the `lmx` process and never move into a daemon.
+- Caller commands stay in the `lmx` process and never move into a daemon: they need the caller's terminal and environment.
 - Owner operations run only in `lmxd`. `lmx` never runs them itself when the daemon is unavailable.
 - `lmx-ipc` and `lmx` do not depend on Solti; only `lmxd` does.
 - `lmxd` runs programs only as Solti tasks, never with `std::process`: tools by their absolute paths in the configuration, and `/bin/sh` for the roots report, the health check and finalize.
 - An apply's state lives in `lmxd`'s memory; after a restart the generation markers are the truth. Finalize runs only in the daemon of the booted system, never in `lmxd --transient`.
-- One daemon serves the socket at a time: `lmxd` refuses a socket that another daemon still serves, so two daemons never apply at once.
+- One daemon serves the socket at a time, and two daemons never apply at once: `lmxd` refuses a socket that another daemon still serves.
 - `lmxd` writes its journal fields without a prefix: task output carries `LMX_TASK` and `LMX_KIND`, apply events also `LMX_GENERATION`. `lmx logs` depends on these names.
 - Colors come from `theme.palette` in the configuration; `lmx` never hard-codes another theme than its Mocha fallback.
 - Only `lmxd` creates its tasks. The Task API on its socket reads them, and root may cancel or delete them.
@@ -82,7 +82,7 @@ Files outside `crates/` provide executable context:
 
 1. Add the value to `Status` in `lmx-model` with a doc comment, and update the examples in `contract/v1/`.
 1. Add a reader module to `lmx-facts`: an I/O function and a pure parser with fixture tests.
-1. Collect it in `lmx/src/status.rs` with `record`, so a failure becomes a problem instead of an error.
+1. Collect it in `lmx/src/status.rs` with `record`, which turns a failure into a problem instead of an error.
 1. Render it in the text output and extend `crates/lmx/tests/cli.rs`.
 
 A fact that only a guest page shows, such as `mounts` and `machine`, skips steps 1 and 3.

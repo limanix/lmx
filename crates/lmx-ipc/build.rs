@@ -1,4 +1,4 @@
-//! Generates the gRPC code of `lmx.v1` with a vendored `protoc`, so builds need no system protoc.
+//! Generates the gRPC code of `lmx.v1` with a vendored `protoc` instead of a system one.
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut config = tonic_prost_build::Config::new();

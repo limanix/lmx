@@ -11,9 +11,9 @@ use crate::proto::owner_client::OwnerClient;
 
 /// Connects to `lmxd` on the socket at `path`.
 ///
-/// The socket is connected before the client is built, so a missing socket or a refused connection
-/// is reported with the operating system's reason. A socket that systemd holds for a daemon that does
-/// not run yet accepts the connection, so callers bound their first call. The connection is used
+/// The socket is connected before the client is built, and a missing socket or a refused connection
+/// is reported with the operating system's reason. Callers bound their first call: a socket that
+/// systemd holds for a daemon that does not run yet accepts the connection. The connection is used
 /// once: a client that loses it fails its next call instead of reconnecting.
 pub async fn connect(path: &Path) -> io::Result<OwnerClient<Channel>> {
     let mut stream = Some(UnixStream::connect(path).await?);

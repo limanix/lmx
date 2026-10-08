@@ -1,5 +1,5 @@
 # Reference unit for the LimaNix platform base, which renders its own copy.
-# The socket outlives lmx.service, so calls wait in the backlog while the daemon restarts.
+# The socket outlives lmx.service: calls wait in the backlog while the daemon restarts.
 [Unit]
 Description=Socket of the LimaNix guest owner
 

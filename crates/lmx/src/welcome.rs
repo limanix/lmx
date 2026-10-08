@@ -2,7 +2,7 @@
 //!
 //! The layout follows the platform's former shell welcome: logo, VM, resources, modules, shared
 //! folders, warnings and the next commands. Labels take 11 columns after a two-column indent, and
-//! values wrap so no line is wider than 80 columns. Facts are read first, so rendering is a pure
+//! values wrap so no line is wider than 80 columns. Facts are read first, and rendering is a pure
 //! function of them.
 
 use std::{io, process::ExitCode};
@@ -290,10 +290,8 @@ fn warn(text: &mut String, paint: Paint, warning: &str) {
 mod tests {
     use super::*;
 
-    /// Bytes in one kibibyte.
     const KIB: u64 = 1024;
 
-    /// A healthy VM with two shared folders.
     fn facts() -> Facts {
         Facts {
             name: "dev-box".into(),
@@ -325,7 +323,6 @@ mod tests {
         }
     }
 
-    /// The text after the logo.
     fn body(text: &str) -> &str {
         let logo_end = text.find(LOGO[7]).expect("logo") + LOGO[7].len() + 1;
         &text[logo_end..]

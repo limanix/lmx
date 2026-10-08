@@ -123,7 +123,6 @@ impl proto::owner_server::Owner for OwnerService {
         } else {
             Err(denied("Only root may apply a generation."))
         };
-        // The stream is new and its buffer empty, so the one event fits.
         let _ = events.try_send(Ok(outcome_event(outcome)));
         Ok(Response::new(ReceiverStream::new(stream)))
     }
@@ -168,7 +167,6 @@ async fn forward(
     }
 }
 
-/// The failure of a caller who may not change the system.
 fn denied(message: &str) -> ErrorBody {
     ErrorBody {
         code: ErrorCode::PermissionDenied,

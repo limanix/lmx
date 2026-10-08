@@ -28,7 +28,7 @@ pub(crate) fn run(config: &Result<Config, String>, name: &OsStr) -> ExitCode {
             return ExitCode::from(output::FAILURE);
         }
     };
-    // The platform rendered a missing provider as an empty command.
+    
     let Some(provider) = config
         .session
         .command

@@ -1,7 +1,3 @@
-# Release binaries are static musl executables. rust-lld ships with the toolchain,
-# so both architectures link on any build host without a C cross toolchain.
-# That holds while dependencies are pure Rust: a crate that compiles C (ring,
-# zstd-sys) needs a musl C compiler, which the CI image lacks.
 [target.aarch64-unknown-linux-musl]
 linker = "rust-lld"
 

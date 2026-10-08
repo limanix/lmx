@@ -91,7 +91,7 @@ Without a mounted generation there is no generation condition.
 A booted generation that is healthy and still keeps older generations has none either: `lmxd` is about to remove them, and a `SystemFinalize` operation shows it.
 When the finalize fails, the generation is `FinalizeFailed` until a later try succeeds; while a try runs there is no generation condition, and a `SystemFinalize` operation shows it.
 An operation's `created_at` is when it was requested, in Unix milliseconds.
-Without the configuration, `ip` and `systemctl` are looked up in `PATH`, so a `config` problem marks a degraded answer.
+Without the configuration, `ip` and `systemctl` are looked up in `PATH`, and a `config` problem marks the answer as degraded.
 
 A generation is `null` when its stage has no valid marker, for example on a system built before `lmx` existed.
 A marker that exists but cannot be read also gives `null` and adds a `generations` problem.

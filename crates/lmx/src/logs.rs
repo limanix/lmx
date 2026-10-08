@@ -1,7 +1,7 @@
 //! `lmx logs KIND`: the output of the latest run of an `lmxd` task kind, from the journal.
 //!
-//! `lmxd` keeps its runs in memory only, and an apply ends with a restart, so the journal is the
-//! history: `--previous` reads the boot before the running one, such as the one that built the
+//! The journal is the history: `lmxd` keeps its runs in memory only, and an apply ends with a
+//! restart. `--previous` reads the boot before the running one, such as the one that built the
 //! running generation.
 
 use std::{io, process::ExitCode};
@@ -50,7 +50,7 @@ pub(crate) fn run(system: &System, kind: LogKind, previous: bool) -> io::Result<
 
 /// The records of the latest task in `records`.
 ///
-/// A restarted `lmxd` numbers its tasks from 1 again, so a run is a task name of one process.
+/// A run is a task name of one process: a restarted `lmxd` numbers its tasks from 1 again.
 fn latest(records: &[Record]) -> Option<Vec<&Record>> {
     let last = records
         .iter()
@@ -87,7 +87,6 @@ fn render(run: &[&Record]) -> String {
 fn utc(micros: u64) -> String {
     let seconds = micros / 1_000_000;
     let (days, of_day) = (seconds / 86_400, seconds % 86_400);
-    // Civil date from days since 1970-01-01, after Howard Hinnant's `civil_from_days`.
     let shifted = days + 719_468;
     let era = shifted / 146_097;
     let of_era = shifted - era * 146_097;
@@ -113,7 +112,6 @@ fn utc(micros: u64) -> String {
 mod tests {
     use super::*;
 
-    /// A record of `task` in process `pid`.
     fn record(pid: u32, task: &str, message: &str, generation: Option<&str>) -> Record {
         Record {
             task: task.into(),

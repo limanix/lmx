@@ -1,4 +1,4 @@
-//! Sockets that wait for connections or datagrams, and the processes that hold them.
+//! Sockets.
 //!
 //! The kernel lists the sockets of each protocol in `/proc/net/{tcp,tcp6,udp,udp6}`, which every
 //! user can read. A socket belongs to the processes with a descriptor of its inode in
@@ -112,9 +112,6 @@ pub fn parse(table: &str, protocol: Protocol) -> Result<Vec<Listener>, FactError
 }
 
 /// Decodes `ADDRESS:PORT` of a socket table.
-///
-/// The kernel prints the address, which is in network order, as native-endian 32-bit words, and the
-/// port as a number.
 fn endpoint(field: &str) -> Option<(IpAddr, u16)> {
     let (address, port) = field.split_once(':')?;
     let port = u16::from_str_radix(port, 16).ok()?;
@@ -158,7 +155,6 @@ pub fn holders(proc: &Path, inodes: &[u64]) -> Result<(Vec<Holder>, bool), FactE
                 complete = false;
                 continue;
             }
-            // The process exited while the list was read.
             Err(_) => continue,
         };
         let mut held: Vec<u64> = descriptors
@@ -195,7 +191,6 @@ mod tests {
 
     use super::*;
 
-    /// A TCP table with a loopback listener, a listener on every address, and a connection.
     const TCP: &str = "\
   sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
    0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 4242 1 0 100 0 0 10 0
@@ -203,7 +198,6 @@ mod tests {
    2: 0A00020F:0016 0100020A:C350 01 00000000:00000000 02:00000AD7 00000000     0        0 12345 4 0 20 4 30 10 -1
 ";
 
-    /// A TCP6 table with listeners on `::1` and on every address.
     const TCP6: &str = "\
   sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
    0: 00000000000000000000000001000000:1F90 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 4243 1 0 100 0 0 10 0

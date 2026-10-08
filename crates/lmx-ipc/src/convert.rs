@@ -11,11 +11,11 @@ use crate::proto;
 impl From<DiskUsage> for proto::DiskUsage {
     fn from(usage: DiskUsage) -> Self {
         Self {
-            bytes: usage.bytes,
-            free_bytes: usage.free_bytes,
             available_bytes: usage.available_bytes,
-            inodes: usage.inodes,
             free_inodes: usage.free_inodes,
+            free_bytes: usage.free_bytes,
+            inodes: usage.inodes,
+            bytes: usage.bytes,
         }
     }
 }
@@ -23,11 +23,11 @@ impl From<DiskUsage> for proto::DiskUsage {
 impl From<proto::DiskUsage> for DiskUsage {
     fn from(usage: proto::DiskUsage) -> Self {
         Self {
-            bytes: usage.bytes,
-            free_bytes: usage.free_bytes,
             available_bytes: usage.available_bytes,
-            inodes: usage.inodes,
             free_inodes: usage.free_inodes,
+            free_bytes: usage.free_bytes,
+            inodes: usage.inodes,
+            bytes: usage.bytes,
         }
     }
 }
@@ -292,13 +292,12 @@ pub fn cancel_outcome(
 mod tests {
     use super::*;
 
-    /// Usage with distinct values in every field.
     const USAGE: DiskUsage = DiskUsage {
-        bytes: 1,
-        free_bytes: 2,
         available_bytes: 3,
-        inodes: 4,
         free_inodes: 5,
+        free_bytes: 2,
+        inodes: 4,
+        bytes: 1,
     };
 
     #[test]

@@ -19,13 +19,13 @@ pub enum CheckStatus {
 /// One check and its finding.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Check {
-    /// Stable name of the check, such as `owner`.
+    /// Stable name of the check.
     pub check: String,
     /// Outcome.
     pub status: CheckStatus,
-    /// Finding for people.
+    /// Text message.
     pub message: String,
-    /// What to do next, when there is something to do.
+    /// Hint if relevant.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hint: Option<String>,
 }

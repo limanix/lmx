@@ -6,9 +6,6 @@
 //! {"contract": 1, "ok": true,  "data": {…}}
 //! {"contract": 1, "ok": false, "error": {"code": "disk.low", "message": "…", "details": {…}}}
 //! ```
-//!
-//! `contract` lets the host refuse an answer it cannot decode instead of misreading it. `code` is for
-//! programs and stays stable; `message` is for people and may change.
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
@@ -58,19 +55,16 @@ impl<T> Envelope<T> {
 /// Reason of a failed command.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ErrorBody {
-    /// Stable machine-readable code.
+    /// Stable code.
     pub code: ErrorCode,
-    /// Explanation for people.
+    /// Explanation.
     pub message: String,
-    /// Code-specific values, such as disk usage for [`ErrorCode::DiskLow`].
+    /// Code-specific values.
     #[serde(default, skip_serializing_if = "Map::is_empty")]
     pub details: Map<String, Value>,
 }
 
 /// Stable failure codes of the host contract.
-///
-/// A code this binary does not know, such as one from a newer `lmxd`, is kept as
-/// [`ErrorCode::Other`], so it can be passed on unchanged and read as a generic failure.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ErrorCode {
     /// `lmxd` is not reachable.
@@ -97,7 +91,7 @@ pub enum ErrorCode {
     SystemDegraded,
     /// A wait ended before its condition held.
     WaitTimeout,
-    /// The finalize of the booted generation failed; the booted generation stays usable.
+    /// To finalize of the booted generation failed; the booted generation stays usable.
     FinalizeFailed,
     /// A code this binary does not know, as received.
     Other(String),
@@ -192,10 +186,8 @@ mod tests {
 
     #[test]
     fn failure_decodes_without_data() {
-        /// A result without a meaningful default, like most command results.
         #[derive(Debug, PartialEq, Deserialize)]
         struct Reserve {
-            /// Bytes freed by the collection.
             freed_bytes: u64,
         }
 

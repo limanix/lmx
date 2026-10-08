@@ -85,7 +85,6 @@ mod tests {
 
     use super::*;
 
-    /// Configuration of a VM named `dev-box` with no modules.
     fn config() -> Config {
         Config {
             schema: 1,

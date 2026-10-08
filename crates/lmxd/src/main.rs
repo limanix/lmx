@@ -1,9 +1,8 @@
 //! `lmxd`: the guest owner daemon of a LimaNix VM.
 //!
-//! systemd starts it as root through `lmx.socket`, which passes the listening socket, so the socket
-//! exists while the daemon restarts. Started without one, it binds the socket itself. It reports
-//! readiness and feeds the watchdog when systemd asks for them, and stops in order on SIGTERM or
-//! SIGINT.
+//! systemd starts it as root through `lmx.socket`, which passes the listening socket and keeps it
+//! while the daemon restarts. Started without one, it binds the socket itself. It reports readiness
+//! and feeds the watchdog when systemd asks for them, and stops in order on SIGTERM or SIGINT.
 //!
 //! The host starts a second, transient daemon from the mounted generation to update the system:
 //! `lmxd --transient --config <package>/etc/lmx/config.json`. It applies, but runs neither the store
@@ -46,8 +45,7 @@ struct Args {
     /// Socket to bind when systemd passes none.
     #[arg(long, default_value = SOCKET_PATH)]
     socket: PathBuf,
-    /// Run as the transient daemon of an update: without the store guard and the generation
-    /// observer.
+    /// Run as the transient daemon of an update: without the store guard and the generation observer.
     #[arg(long)]
     transient: bool,
     /// System root of the guest paths besides the store and the socket; only tests change it.
@@ -87,7 +85,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         root: args.root,
     })
     .await?;
-    let _ = sd_notify::notify(false, &[NotifyState::Ready]);
+    let _ = sd_notify::notify(&[NotifyState::Ready]);
     feed_watchdog();
     tracing::info!("lmxd {} is ready", env!("CARGO_PKG_VERSION"));
     daemon.serve(listener, stop_signal()).await?;
@@ -102,7 +100,6 @@ fn logging() {
     } else {
         LoggerFormat::Text
     };
-    // Journal fields keep their names, such as `LMX_TASK`, so `lmx logs` and people filter by them.
     if let Err(error) = init_logger(&LoggerConfig {
         format,
         journald_field_prefix: None,
@@ -121,9 +118,7 @@ fn listener(path: &Path) -> io::Result<UnixListener> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    // A socket left by an earlier daemon is replaced. One that a daemon still serves, such as the
-    // system daemon when the host starts a transient one, is refused: two daemons would apply at once.
-    // Anything else at the path is not ours.
+
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_socket() => {
             if UnixStream::connect(path).is_ok() {
@@ -144,12 +139,12 @@ fn listener(path: &Path) -> io::Result<UnixListener> {
         Err(error) => return Err(error),
     }
     let listener = UnixListener::bind(path)?;
-    // Every user may connect; peer credentials decide what each caller may do.
+
     fs::set_permissions(path, Permissions::from_mode(0o666))?;
     Ok(listener)
 }
 
-/// How long the system has been up; unknown counts as long, so the guard checks at once.
+/// How long the system has been up; unknown counts as long, and the guard then checks at once.
 fn uptime() -> Duration {
     fs::read_to_string("/proc/uptime")
         .ok()
@@ -159,17 +154,16 @@ fn uptime() -> Duration {
 
 /// Feeds the systemd watchdog at half its interval, when systemd set one.
 fn feed_watchdog() {
-    let mut usec = 0;
-    if !sd_notify::watchdog_enabled(false, &mut usec) {
+    let Some(interval) = sd_notify::watchdog_enabled().filter(|interval| !interval.is_zero())
+    else {
         return;
-    }
+    };
     tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_micros(usec / 2));
-        // After a stall, one ping is enough; a burst would hide how long the stall was.
+        let mut tick = tokio::time::interval(interval / 2);
         tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
         loop {
             tick.tick().await;
-            let _ = sd_notify::notify(false, &[NotifyState::Watchdog]);
+            let _ = sd_notify::notify(&[NotifyState::Watchdog]);
         }
     });
 }
@@ -187,6 +181,6 @@ async fn stop_signal() {
         _ = terminate.recv() => {}
         _ = interrupt.recv() => {}
     }
-    let _ = sd_notify::notify(false, &[NotifyState::Stopping]);
+    let _ = sd_notify::notify(&[NotifyState::Stopping]);
     tracing::info!("stopping");
 }

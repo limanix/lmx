@@ -10,7 +10,7 @@ ExecStart=/run/current-system/sw/bin/lmxd
 # lmxd pings at half this interval; a frozen daemon is aborted and restarted.
 WatchdogSec=30s
 Restart=on-failure
-# Task processes live in this unit's control group, so stopping the unit never leaves them behind.
+# Task processes live in this unit's control group and stop with the unit.
 KillMode=control-group
 # A watchdog abort would otherwise store a core of every process in the unit.
 LimitCORE=0

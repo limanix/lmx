@@ -191,8 +191,8 @@ impl LogKind {
 /// Store operations.
 #[derive(Debug, Subcommand)]
 pub(crate) enum StoreCommand {
-    /// Collect unreferenced store paths when free space is low; the host runs it before it stops
-    /// the VM.
+    /// Collect unreferenced store paths when free space is low;
+    /// the host runs it before it stops the VM.
     Reserve(OutputArgs),
 }
 
