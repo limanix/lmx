@@ -15,19 +15,14 @@ vars:
     sh: sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)"/\1/p' Cargo.toml | head -n 1
 
 tasks:
-  ci:
-    desc: List CI tasks.
-    cmds:
-      - task -l | grep "ci/"
-
   ci/rust-fmt:
-    desc: Check Rust formatting.
+    desc: Check Rust formatting
     cmds:
       - task: rust:fmt
         vars: { FMT_ARGS: '--all --check' }
 
   ci/rust-clippy:
-    desc: Lint every target with Clippy and deny warnings.
+    desc: Run Rust Clippy
     cmds:
       - task: rust:clippy
         vars: { CLIPPY_ARGS: '--workspace --all-targets --locked -- -D warnings' }
@@ -72,7 +67,7 @@ tasks:
           FMT_PATHS: '{{.markdown_paths}}'
 
   release/build:
-    desc: Build static release archives and checksums into dist/.
+    desc: Build binaries
     cmds:
       - task: rust:_cargo/tool
         vars:

@@ -1,0 +1,30 @@
+name: Labels flow
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+concurrency:
+  group: labels-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: read
+
+jobs:
+  check-label:
+    name: check label
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: mr-chelyshkin/actions/check-changelog-label@v1
+        with:
+          allowed-labels: |
+            feature
+            bug
+            docs
+            deps
+            tooling
+            other
+            skip

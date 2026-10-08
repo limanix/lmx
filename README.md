@@ -2,6 +2,12 @@
 
 [![License: Apache-2.0](https://img.shields.io/github/license/limanix/lmx?label=license)](LICENSE)
 
+<p align="center">
+  <img src=".github/assets/readme-header.png"
+       alt="LimaNix lmx"
+       width="100%">
+</p>
+
 > **The owner of a LimaNix VM from inside: one command for people in the guest and one versioned contract for the host.**
 
 `lmx` runs inside every [LimaNix](https://limanix.dev) guest.
@@ -62,8 +68,6 @@ It replaces the platform's store guard, its timer, the daily `nix-gc` timer, and
 
 For an update, the host stops the system daemon and starts one from the mounted generation with `lmxd --transient`, which applies but neither guards the store nor finalizes.
 A daemon never takes over a socket that another daemon still serves.
-
-Reference units are in [`packaging/systemd/`](packaging/systemd).
 
 ## Boundaries worth knowing early
 

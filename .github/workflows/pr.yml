@@ -1,11 +1,12 @@
-name: Pull request checks
+name: PR flow
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    branches: [main]
+    types: [opened, reopened, synchronize]
 
 concurrency:
-  group: pr-${{ github.ref }}
+  group: pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
@@ -43,3 +44,15 @@ jobs:
         uses: mr-chelyshkin/actions/invoke-taskfile@v1
         with:
           command: ${{ matrix.command }}
+
+  gate:
+    if: always()
+    needs: [check]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: mr-chelyshkin/actions/check-job-results@v1
+        with:
+          results: ${{ toJSON(needs) }}

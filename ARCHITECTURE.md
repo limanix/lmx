@@ -74,7 +74,6 @@ Files outside `crates/` provide executable context:
 | Path                                      | Purpose                                                                          |
 | ----------------------------------------- | -------------------------------------------------------------------------------- |
 | [`crates/lmx/tests/`](crates/lmx/tests)   | The command-line contract against a prepared guest tree, with and without `lmxd` |
-| [`packaging/systemd/`](packaging/systemd) | Reference units of `lmxd` for the platform                                       |
 | [`Taskfile.yml`](Taskfile.yml)            | Checks and the release build                                                     |
 | [`.github/workflows/`](.github/workflows) | Pull-request checks and tag releases                                             |
 
