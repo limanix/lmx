@@ -31,3 +31,6 @@ rustc-ice-*.txt
 # Task runner cache
 .cache/
 .task/
+
+# Documentation prepared for the LimaNix site
+build/

@@ -1,0 +1,14 @@
+version: 2
+
+updates:
+  # Workflows pin third-party actions by commit SHA; Dependabot moves the SHA and the version
+  # comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ['*']
+    labels:
+      - deps

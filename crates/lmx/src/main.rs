@@ -2,7 +2,7 @@
 //!
 //! Command of the LimaNix guest owner. Run it inside the VM; the LimaNix host runs it over
 //! management SSH with `--json` and reads the
-//! [host contract](https://github.com/limanix/lmx/blob/main/docs/contract.md).
+//! [host contract](https://github.com/limanix/lmx/blob/main/guides/contract.md).
 //!
 //! | Command               | Kind   | Answers or does                                             |
 //! |-----------------------|--------|-------------------------------------------------------------|
