@@ -193,7 +193,7 @@ impl Store {
     }
 
     /// Usage of the store disk, when it is below the platform minimum or `full` says the disk ran
-    /// out, so a failure can be explained as a full disk.
+    /// out, to explain a failure as a full disk.
     pub(crate) fn shortage(&self, full: bool) -> Option<DiskUsage> {
         (self.usage)()
             .ok()

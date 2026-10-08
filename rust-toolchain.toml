@@ -1,5 +1,3 @@
-# Keep equal to `rust-version` in Cargo.toml, with three components: the shared Taskfile
-# derives the CI image tag and RUSTUP_TOOLCHAIN from that field.
 [toolchain]
 channel    = "1.90.0"
 components = ["clippy", "rustfmt"]

@@ -1,7 +1,7 @@
 //! `lmx store reserve`: room in the Nix store before the host stops the VM.
 //!
 //! The collection runs in `lmxd`, which keeps going if this command is interrupted. The answer
-//! carries the store disk usage before and after, so the host can warn about a disk that stays low.
+//! carries the store disk usage before and after, for the host to warn about a disk that stays low.
 
 use std::{io, process::ExitCode};
 
@@ -55,7 +55,6 @@ mod tests {
 
     use super::*;
 
-    /// 16 GiB disk with `free` GiB available.
     fn usage(free: u64) -> DiskUsage {
         DiskUsage {
             bytes: 16 << 30,

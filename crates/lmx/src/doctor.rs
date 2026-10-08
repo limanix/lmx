@@ -180,7 +180,6 @@ mod tests {
 
     use super::*;
 
-    /// An answer of `lmxd` with conditions of `kinds` and, when `applying`, a running apply.
     fn owner(kinds: &[&str], applying: bool) -> Owner {
         Owner {
             version: env!("CARGO_PKG_VERSION").into(),
@@ -203,7 +202,6 @@ mod tests {
         }
     }
 
-    /// Markers of three stages.
     fn markers(desired: &str, built: &str, booted: &str) -> Generations {
         let stage = |value: &str| (!value.is_empty()).then(|| value.to_owned());
         Generations {
@@ -213,7 +211,6 @@ mod tests {
         }
     }
 
-    /// Statuses and names of `checks`.
     fn summary(checks: &[Check]) -> Vec<(CheckStatus, &str)> {
         checks
             .iter()

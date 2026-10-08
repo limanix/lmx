@@ -3,54 +3,55 @@ version: '3.53.1'
 
 includes:
   rust:
-    taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/v0.0.5/taskfiles/rust/Taskfile.yml
+    # v0.0.5
+    taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/81255f635d839a2b46417720676cd2bebfc10cff/taskfiles/rust/Taskfile.yml
+    internal: true
+  python:
+    # v0.0.5
+    taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/81255f635d839a2b46417720676cd2bebfc10cff/taskfiles/python/Taskfile.yml
     internal: true
   markdown:
-    taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/v0.0.5/taskfiles/markdown/Taskfile.yml
+    # v0.0.5
+    taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/81255f635d839a2b46417720676cd2bebfc10cff/taskfiles/markdown/Taskfile.yml
     internal: true
 
 vars:
-  markdown_paths: README.md ARCHITECTURE.md docs/contract.md
+  markdown_paths: README.md guides
   version:
     sh: sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)"/\1/p' Cargo.toml | head -n 1
 
 tasks:
-  ci:
-    desc: List CI tasks.
-    cmds:
-      - task -l | grep "ci/"
-
-  ci/rust-fmt:
-    desc: Check Rust formatting.
+  ci/rust/fmt:
+    desc: Check Rust formatting
     cmds:
       - task: rust:fmt
         vars: { FMT_ARGS: '--all --check' }
 
-  ci/rust-clippy:
-    desc: Lint every target with Clippy and deny warnings.
+  ci/rust/clippy:
+    desc: Run Rust Clippy
     cmds:
       - task: rust:clippy
         vars: { CLIPPY_ARGS: '--workspace --all-targets --locked -- -D warnings' }
 
-  ci/rust-test:
-    desc: Run unit and integration tests.
+  ci/rust/test:
+    desc: Run Rust tests
     cmds:
       - task: rust:test
         vars: { TEST_ARGS: '--workspace --locked' }
 
-  ci/rust-docs:
-    desc: Build API documentation, including private items, and deny rustdoc warnings.
+  ci/rust/docs/check:
+    desc: Run Rust docs checks
     cmds:
       - task: rust:doc/build
         vars: { DOC_ARGS: '--workspace --no-deps --document-private-items --locked' }
 
-  ci/rust-audit:
-    desc: Scan dependencies for published advisories.
+  ci/rust/audit:
+    desc: Run Rust audit
     cmds:
       - task: rust:audit
 
-  ci/markdown-fmt:
-    desc: Check Markdown formatting without modifying files.
+  ci/markdown/fmt:
+    desc: Check Markdown formatting
     cmds:
       - task: markdown:fmt
         vars:
@@ -58,44 +59,44 @@ tasks:
           TASK_CONTEXT:
             ref: 'merge (dict) (dict "CONTAINER_MOUNT_MODE" "ro") (.TASK_CONTEXT | default .)'
 
-  rust/fix:
-    desc: Format Rust sources.
+  rust/fmt/fix:
+    desc: Fix format Rust sources
     cmds:
       - task: rust:fmt/fix
         vars: { FMT_ARGS: '--all' }
 
   markdown/fix:
-    desc: Format Markdown with the settings used in CI.
+    desc: Fix format Markdown sources
     cmds:
       - task: markdown:fmt/fix
         vars:
           FMT_PATHS: '{{.markdown_paths}}'
 
+  docs/prepare:
+    desc: Prepare LimaNix site docs
+    vars:
+      lmx_ref:
+        sh: |
+          {{if .LMX_REF}}
+          printf '%s\n' {{.LMX_REF | shellQuote}}
+          {{else}}
+          git -C {{.ROOT_DIR | shellQuote}} rev-parse HEAD
+          {{end}}
+    cmds:
+      - task: python:_uv/tool
+        vars:
+          CMD: python scripts/build_docs.py --ref {{.lmx_ref | shellQuote}}
+
   release/build:
-    desc: Build static release archives and checksums into dist/.
+    desc: Build binary
+    requires:
+      vars:
+        - name: ARCH
+          enum: [aarch64, x86_64]
+    vars:
+      ARCH: '{{.ARCH | default (ARCH | replace "arm64" "aarch64" | replace "amd64" "x86_64")}}'
     cmds:
       - task: rust:_cargo/tool
         vars:
           RUSTFLAGS: -D warnings
-          CMD: >-
-            sh -eu -c '
-              version="$1"
-              rm -rf dist
-              mkdir -p dist
-              for system in aarch64-linux x86_64-linux; do
-                case "$system" in
-                  aarch64-linux) target=aarch64-unknown-linux-musl ;;
-                  x86_64-linux) target=x86_64-unknown-linux-musl ;;
-                esac
-                cargo build --release --locked --target "$target" -p lmx -p lmxd
-                name="lmx-$version-$system"
-                mkdir -p "dist/$name"
-                install -m 0755 "$CARGO_TARGET_DIR/$target/release/lmx" "dist/$name/lmx"
-                install -m 0755 "$CARGO_TARGET_DIR/$target/release/lmxd" "dist/$name/lmxd"
-                install -m 0644 LICENSE "dist/$name/LICENSE"
-                tar --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 -C dist -cf "dist/$name.tar" "$name"
-                gzip -9n "dist/$name.tar"
-                (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
-                rm -rf "dist/$name"
-              done
-            ' release {{.version}}
+          CMD: sh scripts/release-archive.sh {{.version}} {{.ARCH}}

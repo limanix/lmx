@@ -1,7 +1,4 @@
 //! Shared folders: the virtiofs and 9p mounts of the guest.
-//!
-//! LimaNix shares Mac folders with virtiofs under Apple's virtualization and with 9p under QEMU.
-//! The kernel's mount table lists every mount of the calling process with its type and options.
 
 use std::{fs, path::Path};
 
@@ -36,10 +33,6 @@ pub fn shared(path: &Path) -> Result<Vec<Mount>, FactError> {
 }
 
 /// Parses `/proc/self/mountinfo`, keeping virtiofs and 9p mounts.
-///
-/// Each line is `id parent major:minor root target options [optional fields] - type source
-/// super-options`. The kernel writes spaces, tabs, newlines and backslashes in the target as octal
-/// escapes such as `\040`.
 pub fn parse(table: &str) -> Result<Vec<Mount>, FactError> {
     let mut mounts = Vec::new();
     for line in table.lines().filter(|line| !line.trim().is_empty()) {
@@ -59,7 +52,6 @@ pub fn parse(table: &str) -> Result<Vec<Mount>, FactError> {
             mounts.push(Mount {
                 target: unescape(target),
                 fs_type: fs_type.to_owned(),
-                // As in findmnt: read-only when the mount or its file system is.
                 read_only: has_ro(options) || has_ro(super_options),
             });
         }
@@ -77,6 +69,7 @@ fn unescape(field: &str) -> String {
     let bytes = field.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
     let mut index = 0;
+
     while index < bytes.len() {
         let escaped = (bytes[index] == b'\\')
             .then(|| bytes.get(index + 1..index + 4))

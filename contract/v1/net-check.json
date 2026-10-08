@@ -13,7 +13,7 @@
       {
         "check": "listener",
         "status": "failed",
-        "message": "TCP 8080 listens on 127.0.0.1 only, so it is reachable only inside the guest.",
+        "message": "TCP 8080 listens on 127.0.0.1 only and is reachable only inside the guest.",
         "hint": "Make the application listen on 0.0.0.0 or the guest address."
       },
       {

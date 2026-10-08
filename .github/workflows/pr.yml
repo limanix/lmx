@@ -1,45 +1,87 @@
-name: Pull request checks
+name: PR flow
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    branches: [main]
+    types: [opened, reopened, synchronize]
 
 concurrency:
-  group: pr-${{ github.ref }}
+  group: pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  check:
-    name: ${{ matrix.command }}
+  markdown:
+    name: Markdown formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: mr-chelyshkin/actions/invoke-taskfile@v1
+        with:
+          command: ci/markdown/fmt
+
+  docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: mr-chelyshkin/actions/invoke-taskfile@v1
+        with:
+          command: docs/prepare
+
+  rust:
+    needs: [markdown, docs]
+    uses: mr-chelyshkin/actions/.github/workflows/pr-rust.yml@v1
+    permissions:
+      contents: read
+    with:
+      cache-path: .cache/rust
+      cache-key-prefix: lmx-rust-v1
+      cache-dependency-path: |
+        Cargo.lock
+        Cargo.toml
+        rust-toolchain.toml
+
+  release:
+    name: Release build (${{ matrix.arch }})
+    needs: rust
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        command:
-          - ci/rust-fmt
-          - ci/rust-clippy
-          - ci/rust-test
-          - ci/rust-docs
-          - ci/rust-audit
-          - ci/markdown-fmt
-          - release/build
+        arch: [aarch64, x86_64]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
       - name: Cache Cargo registry and build results
-        if: matrix.command != 'ci/markdown-fmt'
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: .cache/rust
-          key: rust-${{ runner.os }}-${{ runner.arch }}-${{ matrix.command }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'rust-toolchain.toml') }}
+          key: lmx-rust-v1-${{ runner.os }}-${{ runner.arch }}-release-${{ matrix.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'rust-toolchain.toml') }}
           restore-keys: |
-            rust-${{ runner.os }}-${{ runner.arch }}-${{ matrix.command }}-
-      - name: Run ${{ matrix.command }}
+            lmx-rust-v1-${{ runner.os }}-${{ runner.arch }}-release-${{ matrix.arch }}-
+      - name: Build the release archive
         uses: mr-chelyshkin/actions/invoke-taskfile@v1
         with:
-          command: ${{ matrix.command }}
+          command: release/build ARCH=${{ matrix.arch }}
+
+  gate:
+    if: always()
+    needs: [markdown, docs, rust, release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: mr-chelyshkin/actions/check-job-results@v1
+        with:
+          results: ${{ toJSON(needs) }}

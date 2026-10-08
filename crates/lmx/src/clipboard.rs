@@ -1,8 +1,8 @@
 //! `pbcopy`, `pbpaste` and `lmx clipboard`: the Mac clipboard through the terminal.
 //!
 //! The terminal on the Mac carries the clipboard in OSC 52 escape sequences and must allow them in
-//! its settings. Inside tmux, tmux owns the terminal and passes its buffers to the attached client,
-//! so both commands hand over to tmux.
+//! its settings. Inside tmux, both commands hand over to tmux: it owns the terminal and passes its
+//! buffers to the attached client.
 
 use std::{
     env,
@@ -79,7 +79,6 @@ pub(crate) fn paste() -> io::Result<ExitCode> {
         return Ok(ExitCode::from(output::FAILURE));
     };
     let reply = {
-        // The reply arrives as terminal input without a newline: read it raw and without echo.
         let _raw = RawMode::enter(&reader);
         writer.write_all(PASTE_REQUEST)?;
         writer.flush()?;
@@ -117,7 +116,7 @@ fn payload(input: &[u8]) -> Option<&[u8]> {
         .windows(REPLY_START.len())
         .position(|window| window == REPLY_START)?;
     let reply = &input[start + REPLY_START.len()..];
-    // ST is two bytes: a reply ends only with its `\`, which must not be left for the shell.
+
     let end = (0..reply.len()).find(|&index| match reply[index] {
         b'\x07' => true,
         b'\x1b' => reply.get(index + 1) == Some(&b'\\'),
@@ -142,12 +141,10 @@ fn read_reply(terminal: &File, timeout: Duration) -> io::Result<Vec<u8>> {
         match poll(&mut ready, Some(&wait)) {
             Ok(0) => break,
             Ok(_) => {}
-            // Interrupted by a signal: wait for the rest of the time.
             Err(Errno::INTR) => continue,
             Err(error) => return Err(error.into()),
         }
-        // Without input, the terminal hung up or cannot be polled, as `/dev/tty` on macOS; a read
-        // would block past the timeout.
+
         if !ready[0].revents().contains(PollFlags::IN) {
             break;
         }
@@ -156,8 +153,7 @@ fn read_reply(terminal: &File, timeout: Duration) -> io::Result<Vec<u8>> {
             break;
         }
         input.extend_from_slice(&buffer[..count]);
-        // Base64 holds neither byte that ends a reply, so only a chunk with one needs a new scan;
-        // scanning after every chunk would take quadratic time on a large clipboard.
+
         let chunk = &buffer[..count];
         if chunk.iter().any(|byte| matches!(byte, b'\x07' | b'\\')) && payload(&input).is_some() {
             break;
@@ -191,7 +187,6 @@ fn paste_through_tmux(tmux: &Path, timeout: Duration) -> io::Result<ExitCode> {
     }
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
-        // The new buffer is printed by name, so a buffer created after it is not printed instead.
         if let Some(created) = newest().filter(|newest| Some(newest) != before.as_ref()) {
             let name = created
                 .split_once(' ')
@@ -260,10 +255,10 @@ impl<'a> RawMode<'a> {
             let mut raw = mode.clone();
             raw.local_modes
                 .remove(LocalModes::ECHO | LocalModes::ICANON);
-            // As `cfmakeraw`: a read returns as soon as one byte arrives.
+
             raw.special_codes[SpecialCodeIndex::VMIN] = 1;
             raw.special_codes[SpecialCodeIndex::VTIME] = 0;
-            // A terminal that refuses the change still answers, only echoed.
+
             let _ = termios::tcsetattr(terminal, OptionalActions::Now, &raw);
         }
         Self { terminal, saved }

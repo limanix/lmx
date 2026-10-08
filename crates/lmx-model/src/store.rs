@@ -35,7 +35,6 @@ pub struct Shortage {
 mod tests {
     use crate::{CONTRACT_VERSION, Envelope, ErrorCode, Reserve, Shortage};
 
-    /// The published reserve examples decode and encode without loss.
     #[test]
     fn contract_examples_round_trip() {
         let example = include_str!("../../../contract/v1/store-reserve.json");

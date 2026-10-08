@@ -11,7 +11,7 @@
 //! | `From` impls  | conversions between its messages and the `lmx-model` contract types   |
 //!
 //! The socket is open to every local user; `lmxd` decides what each caller may do from the peer
-//! credentials of the connection. The crate has no Solti dependency, so `lmx` stays light.
+//! credentials of the connection. The crate has no Solti dependency and keeps `lmx` light.
 #![forbid(unsafe_code)]
 
 mod client;

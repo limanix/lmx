@@ -1,8 +1,8 @@
 //! `lmx status`: what the guest is right now.
 //!
-//! Every fact is read independently. A fact that cannot be read becomes `null` with a
-//! [`Problem`], so the host and people always get the rest. The owner part comes from `lmxd` when it
-//! answers within two seconds. `--short` asks `lmxd` only, and prints what needs attention.
+//! Every fact is read independently. A fact that cannot be read becomes `null` with a [`Problem`],
+//! and the host and people still get the rest. The owner part comes from `lmxd` when it answers
+//! within two seconds. `--short` asks `lmxd` only, and prints what needs attention.
 
 use std::{io, process::ExitCode, time::Duration};
 
@@ -45,8 +45,7 @@ pub(crate) fn run(system: &System, args: &StatusArgs) -> io::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// The words of `lmx status --short`: what needs attention, most urgent first; none when all is
-/// well.
+/// The words of `lmx status --short`: what needs attention, most urgent first; none when all is well.
 fn short(owner: &Owner) -> Vec<&'static str> {
     let holds = |kind: &str| {
         owner

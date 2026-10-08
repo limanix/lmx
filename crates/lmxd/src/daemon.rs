@@ -287,7 +287,6 @@ fn check(config: &Config) -> Result<(), Error> {
 mod tests {
     use super::*;
 
-    /// Configuration with absolute tools and the platform thresholds.
     fn config() -> Config {
         let tool = |name: &str| format!("/run/current-system/sw/bin/{name}");
         let json = serde_json::json!({

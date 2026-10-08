@@ -38,14 +38,14 @@ const HEALTH_SLOT: &str = "health";
 /// Longest a health check may run; a check that hangs, such as on a stuck mount, fails.
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 
-/// Longest a finalize may run: well within the 10 minutes the host waits after a restart, so a stuck
-/// finalize is reported as failed before that wait ends.
+/// Longest a finalize may run: well within the 10 minutes the host waits after a restart, for a
+/// stuck finalize to be reported as failed before that wait ends.
 const FINALIZE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 /// When the observer looks at the generations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ObserverSchedule {
-    /// Wait before the first look, so the system can settle after boot.
+    /// Wait before the first look, for the system to settle after boot.
     pub first: Duration,
     /// Wait after each look before the next one.
     pub every: Duration,
@@ -188,7 +188,6 @@ impl Observer {
         if !(healthy && finalize) {
             return;
         }
-        // The check takes a while: an apply may have built another generation meanwhile.
         let (generations, _) = lmx_facts::generations::read(&self.paths.generations());
         if settled(&generations) != Some(generation.as_str()) {
             return;
@@ -278,8 +277,6 @@ impl Observer {
         workload: ModelResult<TaskWorkload>,
     ) -> Result<(), String> {
         let mut lines = self.capture.listen(name);
-        // A finalize never waits behind a build in the system slot: after the build, the older
-        // generations would include the booted one. A dropped finalize is tried again later.
         let placement = match kind {
             Kind::SystemHealth => Placement {
                 slot: HEALTH_SLOT,
@@ -330,7 +327,7 @@ enum Step {
 /// and `finalize`.
 ///
 /// A failed finalize runs again once its back-off ends, even when it removed the older generations
-/// before it failed, so the boot entries are rewritten.
+/// before it failed, and the retry rewrites the boot entries.
 fn step(kept: usize, health: &Health, finalize: &Finalize, now: Instant) -> Step {
     match finalize {
         Finalize::Running => Step::Rest,
@@ -410,7 +407,6 @@ pub(crate) async fn observe(observer: Arc<Observer>, schedule: ObserverSchedule)
 mod tests {
     use super::*;
 
-    /// Generations with the three stages given.
     fn generations(desired: &str, built: &str, booted: &str) -> Generations {
         let stage = |value: &str| (!value.is_empty()).then(|| value.to_owned());
         Generations {
@@ -420,7 +416,6 @@ mod tests {
         }
     }
 
-    /// Kinds of the conditions for `generations`, `kept` and `health`, without a finalize.
     fn kinds(generations: &Generations, kept: Option<usize>, health: &Health) -> Vec<String> {
         conditions(generations, kept, health, &Finalize::Idle)
             .into_iter()
@@ -529,7 +524,6 @@ mod tests {
         );
     }
 
-    /// Kinds of the conditions of a settled generation with one profile generation.
     fn kinds_with(generations: &Generations, health: &Health, finalize: &Finalize) -> Vec<String> {
         conditions(generations, Some(1), health, finalize)
             .into_iter()

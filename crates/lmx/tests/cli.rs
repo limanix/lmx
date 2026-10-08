@@ -11,22 +11,12 @@ use std::{
 
 use serde_json::{Value, json};
 
-/// Paths of the fake `ip`, `systemctl` and `journalctl`.
 struct Tools {
-    /// Prints one interface with a global IPv4 address.
     ip: PathBuf,
-    /// Prints one failed unit.
     systemctl: PathBuf,
-    /// Prints the records of two builds for `lmx logs apply`, and fails like journalctl without
-    /// permission for anything else.
     journalctl: PathBuf,
 }
 
-/// Fake tools shared by every test.
-///
-/// macOS checks a new executable the first time it runs. With many new scripts at once the check can
-/// outlast the 3-second tool timeout of `lmx`, so the tools are written once and run once before a
-/// test needs them.
 fn tools() -> &'static Tools {
     static TOOLS: OnceLock<Tools> = OnceLock::new();
     TOOLS.get_or_init(|| {
@@ -58,7 +48,6 @@ fn tools() -> &'static Tools {
     })
 }
 
-/// Installs an executable that prints `output` into `directory`, runs it once and returns its path.
 fn fake_tool(directory: &Path, name: &str, output: &str) -> PathBuf {
     assert!(!output.contains('\''), "tool output is single-quoted");
     fake_script(
@@ -68,12 +57,6 @@ fn fake_tool(directory: &Path, name: &str, output: &str) -> PathBuf {
     )
 }
 
-/// Installs `script` as the executable `name` in `directory`, runs it once without arguments and
-/// returns its path.
-///
-/// The script uses only shell built-ins because the tests run `lmx` with an empty `PATH`. Another
-/// test run, such as one an IDE starts, may be running the tool at the same time, so an outdated
-/// tool is replaced whole and a current one is left alone.
 fn fake_script(directory: &Path, name: &str, script: &str) -> PathBuf {
     let path = directory.join(name);
     let current = fs::read_to_string(&path).ok().as_deref() == Some(script)
@@ -91,7 +74,6 @@ fn fake_script(directory: &Path, name: &str, script: &str) -> PathBuf {
     path
 }
 
-/// Journal records of two builds of one `lmxd`, as `journalctl -o json` prints them.
 const JOURNAL: &str = concat!(
     r#"{"MESSAGE":"applying generation 0123456789aa","LMX_TASK":"system-apply-1","LMX_GENERATION":"0123456789aa","_PID":"812","__REALTIME_TIMESTAMP":"1791364000000000"}"#,
     "\n",
@@ -100,28 +82,22 @@ const JOURNAL: &str = concat!(
     r#"{"MESSAGE":"building the system configuration...","LMX_TASK":"system-apply-2","_PID":"812","__REALTIME_TIMESTAMP":"1791364324000000"}"#,
 );
 
-/// Socket table with a TCP listener on `127.0.0.1:8080` of user 1000, socket inode 4242.
 const TCP: &str = "\
   sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
    0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 4242 1 0 100 0 0 10 0
 ";
 
-/// Mount table with the root disk and two shared folders.
 const MOUNTINFO: &str = "\
 22 1 254:1 / / rw,relatime shared:1 - ext4 /dev/vda1 rw
 40 22 0:38 / /home/dev rw,relatime shared:20 - virtiofs mount0 rw
 41 22 0:39 / /mnt/limanix ro,relatime shared:21 - virtiofs mount1 ro
 ";
 
-/// A guest tree with generation markers, a store directory, kernel tables and a configuration that
-/// names the fake tools.
 struct Guest {
-    /// Root replacing `/`; removed when the test ends.
     root: tempfile::TempDir,
 }
 
 impl Guest {
-    /// Prepares a guest that built generation `0123456789ab` and still runs `ba9876543210`.
     fn new() -> Self {
         let guest = Self {
             root: tempfile::tempdir().expect("temporary guest root"),
@@ -172,22 +148,32 @@ impl Guest {
             }
         });
         guest.write("etc/lmx/config.json", &config.to_string());
+        let help = json!({
+            "schema": 1,
+            "topics": {
+                "python": {
+                    "title": "Python 3.12.14",
+                    "summary": "Python 3 with venv, virtualenv, and the Pyright language server.",
+                    "commands": ["python", "virtualenv", "pyright", "python-3.12"],
+                    "tips": [{"label": "New venv", "text": "python -m venv .venv"}],
+                    "guide": "https://limanix.dev/categories/nixos/modules/python/README.html"
+                }
+            }
+        });
+        guest.write("etc/lmx/help.json", &help.to_string());
         guest
     }
 
-    /// Writes `content` to `relative` below the root.
     fn write(&self, relative: &str, content: &str) {
         let path = self.root.path().join(relative);
         fs::create_dir_all(path.parent().expect("file has a parent")).expect("create parent");
         fs::write(path, content).expect("write file");
     }
 
-    /// Path of `relative` below the root.
     fn path(&self, relative: &str) -> PathBuf {
         self.root.path().join(relative)
     }
 
-    /// Writes an executable shell script with `body` to `relative` and returns its path.
     fn script(&self, relative: &str, body: &str) -> PathBuf {
         let path = self.root.path().join(relative);
         self.write(relative, &format!("#!/bin/sh\n{body}"));
@@ -196,7 +182,6 @@ impl Guest {
         path
     }
 
-    /// Replaces the session part of the configuration.
     fn set_session(&self, session: Value) {
         let mut config: Value =
             serde_json::from_slice(&fs::read(self.config()).expect("read configuration"))
@@ -205,17 +190,14 @@ impl Guest {
         self.write("etc/lmx/config.json", &config.to_string());
     }
 
-    /// Path of the configuration inside the tree.
     fn config(&self) -> PathBuf {
         self.root.path().join("etc/lmx/config.json")
     }
 
-    /// Prepares `lmx` with the tree as its system root.
     fn command(&self, args: &[&str], config: &Path) -> Command {
         self.command_as(env!("CARGO_BIN_EXE_lmx"), args, config)
     }
 
-    /// Prepares the binary under one of its other names, through a link named `name`.
     fn alias(&self, name: &str, args: &[&str]) -> Command {
         let link = self.root.path().join("aliases").join(name);
         if !link.exists() {
@@ -225,10 +207,6 @@ impl Guest {
         self.command_as(link, args, &self.config())
     }
 
-    /// Prepares `program` with the tree as its system root, outside any tmux session.
-    ///
-    /// The terminal is a file that does not exist, so a test reaches the terminal running the tests
-    /// only if it names one.
     fn command_as(&self, program: impl AsRef<Path>, args: &[&str], config: &Path) -> Command {
         let mut command = Command::new(program.as_ref());
         command
@@ -243,13 +221,11 @@ impl Guest {
         command
     }
 
-    /// Runs `lmx` with the tree as its system root.
     fn lmx(&self, args: &[&str], config: &Path) -> Output {
         self.command(args, config).output().expect("run lmx")
     }
 }
 
-/// Parses standard output as one JSON answer.
 fn answer(output: &Output) -> Value {
     assert!(
         output.status.success(),
@@ -264,9 +240,6 @@ fn answer(output: &Output) -> Value {
     serde_json::from_slice(line).expect("standard output is one JSON answer")
 }
 
-/// Installs a fake `tmux` that logs its calls and returns the directory holding it.
-///
-/// `refresh-client` creates a new buffer only when the terminal `answers`.
 fn fake_tmux(guest: &Guest, answers: bool) -> PathBuf {
     let state = guest.path("tmux");
     fs::create_dir_all(&state).expect("create the tmux state");
@@ -292,14 +265,12 @@ esac
     guest.path("bin")
 }
 
-/// Prepares `command` to run in a tmux session whose `tmux` is the fake one in `bin`.
 fn in_tmux<'a>(command: &'a mut Command, bin: &Path) -> &'a mut Command {
     command
         .env("TMUX", "/tmp/tmux-501/default,1,0")
         .env("PATH", bin)
 }
 
-/// Runs `command` with `input` on standard input.
 fn run_with_input(command: &mut Command, input: &[u8]) -> Output {
     let mut child = command
         .stdin(Stdio::piped())
@@ -496,16 +467,50 @@ fn help_without_metadata_lists_commands_and_fails() {
 }
 
 #[test]
-fn help_takes_no_other_arguments() {
+fn help_shows_the_card_of_a_topic_by_name_selector_or_version_line() {
+    let guest = Guest::new();
+    for topic in ["python", "python-3.12", "lmx:python-3.12"] {
+        let output = guest.lmx(&["help", topic], &guest.config());
+        assert!(output.status.success(), "{topic}");
+        let text = String::from_utf8(output.stdout).expect("UTF-8 text");
+        assert!(text.starts_with("  Python 3.12.14\n"), "{topic}: {text}");
+        assert!(
+            text.contains("  Commands   python, virtualenv, pyright, python-3.12\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("  New venv   python -m venv .venv\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "  Guide      https://limanix.dev/categories/nixos/modules/python/README.html\n"
+            ),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn help_for_an_unknown_topic_lists_the_topics_and_fails() {
     let guest = Guest::new();
     for args in [
-        &["--help", "extra"][..],
+        &["help", "golang"][..],
+        &["--help", "extra"],
         &["-h", "status"],
-        &["help", "extra"],
     ] {
         let output = guest.lmx(args, &guest.config());
-        assert_eq!(output.status.code(), Some(2), "{args:?}");
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains("; topics: python"), "{args:?}: {error}");
     }
+}
+
+#[test]
+fn help_takes_one_topic() {
+    let guest = Guest::new();
+    let output = guest.lmx(&["help", "python", "go"], &guest.config());
+    assert_eq!(output.status.code(), Some(2));
 }
 
 #[test]
@@ -940,7 +945,7 @@ fn net_check_finds_a_listener_that_only_the_guest_reaches() {
                 {
                     "check": "listener",
                     "status": "failed",
-                    "message": "TCP 8080 listens on 127.0.0.1 only, so it is reachable only inside the guest.",
+                    "message": "TCP 8080 listens on 127.0.0.1 only and is reachable only inside the guest.",
                     "hint": "Make the application listen on 0.0.0.0 or the guest address."
                 },
                 {
@@ -965,7 +970,6 @@ fn logs_show_the_latest_run_of_a_kind() {
          building the system configuration...\n"
     );
 
-    // The fake fails for any other query, as journalctl does for a user without access.
     let output = guest.lmx(&["logs", "health"], &guest.config());
     assert_eq!(output.status.code(), Some(1), "{output:?}");
     assert!(

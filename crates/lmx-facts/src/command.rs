@@ -15,12 +15,12 @@ const STDERR_TAIL: usize = 2048;
 
 /// Longest wait for one tool.
 ///
-/// `lmx status` runs `ip` and `systemctl` in turn and the host waits 10 seconds for its answer, so a
-/// stuck tool, such as `systemctl` while PID 1 does not answer, still leaves time for the other facts.
+/// `lmx status` runs `ip` and `systemctl` in turn and the host waits 10 seconds for its answer: a
+/// stuck tool, such as `systemctl` while PID 1 does not answer, must still leave time for the other
+/// facts.
 const TIMEOUT: Duration = Duration::from_secs(3);
 
-/// Runs `program` with `args` and returns standard output if it exits successfully within
-/// [`TIMEOUT`].
+/// Runs `program` with `args` and returns standard output if it exits successfully within [`TIMEOUT`].
 ///
 /// Standard input is closed so a tool that unexpectedly prompts fails instead of waiting.
 pub(crate) fn output(program: &Path, args: &[&str]) -> Result<Vec<u8>, FactError> {
@@ -49,8 +49,7 @@ fn output_within(program: &Path, args: &[&str], timeout: Duration) -> Result<Vec
 
 /// Runs `program` with `args`, waiting at most `timeout`; a failure is [`FactError::Command`].
 ///
-/// A tool that is still running is left to finish on its own instead of being killed: `systemctl`
-/// gives up on D-Bus after 25 seconds, and a tool that writes after `lmx` has exited gets `SIGPIPE`.
+/// A tool that is still running is left to finish on its own instead of being killed.
 fn run(program: &Path, args: &[&str], timeout: Duration) -> Result<Output, FactError> {
     let spawn_error = |source| FactError::Spawn {
         program: program.display().to_string(),
@@ -93,7 +92,6 @@ mod tests {
 
     use super::*;
 
-    /// Runs `script` with `/bin/sh` as the tool.
     fn shell(script: &str, timeout: Duration) -> Result<Vec<u8>, FactError> {
         output_within(Path::new("/bin/sh"), &["-c", script], timeout)
     }
@@ -111,7 +109,6 @@ mod tests {
 
     #[test]
     fn keeps_the_end_of_long_standard_error_on_a_character_boundary() {
-        // 3000 bytes of three-byte characters: the last 2048 bytes start inside a character.
         let script = format!("printf %s '{}' >&2; exit 1", "€".repeat(1000));
         let error = shell(&script, TIMEOUT).expect_err("sh exits with 1");
         let FactError::Command { stderr, .. } = error else {
@@ -131,9 +128,6 @@ mod tests {
 
     #[test]
     fn stops_waiting_for_a_tool_that_hangs() {
-        // The sleep stays shorter than `TIMEOUT`. On macOS a pipe becomes close-on-exec only after
-        // it is created, so a pipe another test creates at that moment can leak into the sleep,
-        // and that test then waits for the sleep to exit.
         let started = Instant::now();
         let error = shell("exec sleep 2", Duration::from_millis(100)).expect_err("sleep hangs");
         assert!(matches!(error, FactError::Timeout { .. }), "{error}");

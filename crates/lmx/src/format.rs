@@ -10,7 +10,6 @@ pub(crate) fn gibibytes(bytes: u64) -> String {
     let (bytes, gib) = (u128::from(bytes), u128::from(GIB));
     let tenths = (bytes * 10 + gib / 2) / gib;
     if tenths >= 100 {
-        // Rounded from bytes, not from tenths: 10.47 GiB is 10, not 10.5 rounded up to 11.
         format!("{} GiB", (bytes + gib / 2) / gib)
     } else {
         format!("{}.{} GiB", tenths / 10, tenths % 10)

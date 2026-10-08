@@ -1,7 +1,8 @@
 //! Locations and configuration of the running guest.
 //!
-//! Without a readable configuration, `ip` and `systemctl` are looked up in `PATH`, so `lmx status`
-//! still reports interfaces and failed units; its `config` problem marks the answer as degraded.
+//! Without a readable configuration, `ip` and `systemctl` are looked up in `PATH`, and
+//! `lmx status` still reports interfaces and failed units; its `config` problem marks the answer
+//! as degraded.
 
 use std::{
     env,
@@ -13,7 +14,7 @@ use lmx_facts::{
     sockets::PROC_PATH,
 };
 use lmx_ipc::SOCKET_PATH;
-use lmx_model::{CONFIG_PATH, Config};
+use lmx_model::{CONFIG_PATH, Config, Help};
 
 /// Guest locations and the platform configuration, resolved once per command.
 #[derive(Debug)]
@@ -22,6 +23,8 @@ pub(crate) struct System {
     root: PathBuf,
     /// Platform configuration, or why it could not be read.
     pub(crate) config: Result<Config, String>,
+    /// Help cards beside the configuration, as NixOS renders them.
+    help_path: PathBuf,
 }
 
 impl System {
@@ -35,7 +38,17 @@ impl System {
     /// Resolves locations below `root` and reads the configuration at `config_path`.
     pub(crate) fn new(root: PathBuf, config_path: &Path) -> Self {
         let config = Config::load(config_path).map_err(|error| error.to_string());
-        Self { root, config }
+        let help_path = config_path.with_file_name("help.json");
+        Self {
+            root,
+            config,
+            help_path,
+        }
+    }
+
+    /// Help cards of the selected modules, or why they could not be read.
+    pub(crate) fn help(&self) -> Result<Help, String> {
+        Help::load(&self.help_path).map_err(|error| error.to_string())
     }
 
     /// Path whose file system holds the Nix store.

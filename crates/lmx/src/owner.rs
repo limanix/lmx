@@ -22,8 +22,9 @@ const STATUS_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// How long an owner operation waits for `lmxd` to answer at all before it asks for the operation.
 ///
-/// systemd accepts connections on the socket before the daemon runs, so a daemon that never
-/// starts would otherwise keep the host waiting; this is long enough for a socket-activated start.
+/// systemd accepts connections on the socket before the daemon runs, and without this limit a
+/// daemon that never starts would keep the host waiting; this is long enough for a
+/// socket-activated start.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Why a call to `lmxd` gave no answer of the host contract.
@@ -114,7 +115,7 @@ pub(crate) fn apply(
             .await
             .map_err(|status| CallError::from_status(&status))?
             .into_inner();
-        // lmxd ends every stream with an outcome, so a stream that breaks or ends early lost lmxd.
+
         loop {
             let message = events
                 .message()
@@ -179,7 +180,7 @@ pub(crate) fn report(error: CallError, json: bool) -> io::Result<ExitCode> {
     }
 }
 
-/// Connects to `lmxd` on `socket` and checks that it answers within [`PROBE_TIMEOUT`], so a daemon
+/// Connects to `lmxd` on `socket` and checks that it answers within [`PROBE_TIMEOUT`]: a daemon
 /// that never starts is reported as unavailable instead of waited for.
 async fn ready(socket: &Path) -> Result<OwnerClient<Channel>, CallError> {
     let mut client = connect(socket).await?;

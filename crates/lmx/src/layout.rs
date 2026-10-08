@@ -1,6 +1,6 @@
 //! Text layout in terminal columns.
 //!
-//! Widths follow Unicode East Asian Width, so CJK and emoji take two columns and wrapped text never
+//! Widths follow Unicode East Asian Width: CJK and emoji take two columns, and wrapped text never
 //! runs past the edge of the screen.
 
 use unicode_width::UnicodeWidthStr;
@@ -18,8 +18,6 @@ pub(crate) fn wrap(text: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut rest = text;
     while !rest.is_empty() {
-        // Prefixes are measured whole, as `columns` measures: joined emoji are narrower than the
-        // sum of their characters.
         let end = rest
             .char_indices()
             .map(|(index, character)| index + character.len_utf8())

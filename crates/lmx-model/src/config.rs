@@ -4,8 +4,8 @@
 //! the system. A booted generation and its configuration therefore always match, and the binaries
 //! never receive configuration from the host at runtime.
 //!
-//! Unknown fields are rejected: the file and the binary come from one generation, so a mismatch is a
-//! packaging error rather than a compatibility case.
+//! Unknown fields are rejected. The file and the binary come from one generation, and a mismatch
+//! between them is a packaging error rather than a compatibility case.
 
 use std::{
     collections::BTreeMap,
@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 /// Path of the configuration inside a booted guest.
 pub const CONFIG_PATH: &str = "/etc/lmx/config.json";
 
-/// Configuration schema understood by this crate.
+/// Configuration schema.
 pub const CONFIG_SCHEMA: u32 = 1;
 
 /// Platform configuration of one guest generation.
@@ -53,11 +53,11 @@ pub struct Config {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Vm {
-    /// VM name from `limanix.toml`; also the guest host name.
+    /// VM name from `limanix.toml`.
     pub name: String,
-    /// Guest architecture as LimaNix names it: `arm64` or `amd64`.
+    /// Guest architecture.
     pub arch: String,
-    /// Human-readable operating system release, such as `NixOS 26.05`.
+    /// Readable operating system release.
     pub system: String,
 }
 
@@ -67,7 +67,7 @@ pub struct Vm {
 pub struct User {
     /// Login name.
     pub name: String,
-    /// Home directory; a host mount in LimaNix.
+    /// Home directory.
     pub home: String,
     /// Numeric user ID; equals the user's ID on the Mac.
     pub uid: u32,
@@ -96,15 +96,12 @@ pub struct Session {
 }
 
 /// Absolute paths of the system tools the binaries run.
-///
-/// `lmxd` runs its tools with a cleared environment, and NixOS has no tools in a default `PATH`, so
-/// every tool is named by its store path.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Tools {
     /// `ip` from iproute2, used for interface addresses.
     pub ip: String,
-    /// `systemctl`, used for failed units.
+    /// `systemctl`.
     pub systemctl: String,
     /// `nix-store`, used to collect unreferenced store paths and to list garbage-collector roots.
     pub nix_store: String,
@@ -122,8 +119,8 @@ pub struct Tools {
     pub sudo: String,
     /// `bash`, the login shell of that command.
     pub bash: String,
-    /// `systemd-run`, used to run `switch-to-configuration` in its own unit, so stopping `lmxd`
-    /// never interrupts a boot loader update.
+    /// `systemd-run`, used to run `switch-to-configuration` in its own unit, where stopping
+    /// `lmxd` never interrupts a bootloader update.
     pub systemd_run: String,
     /// `journalctl`, used to read the history of `lmxd` tasks.
     pub journalctl: String,
@@ -200,9 +197,6 @@ impl Config {
     }
 
     /// Parses configuration JSON, checking its schema before its fields.
-    ///
-    /// Another schema usually has other fields, so it is reported as [`ConfigError::Schema`] rather
-    /// than as an unknown or missing field.
     pub fn from_json(data: &[u8]) -> Result<Self, ConfigError> {
         let Header { schema } = serde_json::from_slice(data)?;
         if schema != CONFIG_SCHEMA {

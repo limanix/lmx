@@ -10,8 +10,8 @@
 //!
 //! A missing or malformed marker gives `None`: a system built before `lmx` existed has no marker,
 //! and that is an answer rather than a failure. A marker that exists but cannot be read also gives
-//! `None`, and the failure is returned with it: the host mount is closed to people in the guest, so
-//! their answer is partial and must be marked as such.
+//! `None`, and the failure is returned with it. People in the guest cannot read the host mount, and
+//! their partial answer must be marked as such.
 
 use std::{
     ffi::OsStr,
@@ -45,9 +45,6 @@ impl GenerationPaths {
     }
 
     /// Marker locations below `root`, for tests.
-    ///
-    /// Not for inspecting another machine's tree: the system profile and `/run/booted-system` are
-    /// absolute symlinks into `/nix/store`, which resolve on the inspecting machine.
     pub fn under(root: &Path) -> Self {
         Self {
             desired: root.join("mnt/limanix/flake/runtime.json"),
@@ -104,7 +101,7 @@ pub const PROFILES_PATH: &str = "/nix/var/nix/profiles";
 
 /// Counts the generations of the system profile: the `system-<number>-link` entries of `profiles`.
 ///
-/// More than one means older generations are kept, so the current one is not finalized yet.
+/// More than one means older generations are kept and the current one is not finalized yet.
 pub fn system_generations(profiles: &Path) -> Result<usize, FactError> {
     let unreadable = |source| FactError::Io {
         what: "the system profile generations",
@@ -207,7 +204,6 @@ mod tests {
     fn reports_a_marker_that_cannot_be_read() {
         let root = tempfile::tempdir().expect("temporary root");
         let paths = GenerationPaths::under(root.path());
-        // Root reads any file, so a directory stands in for the host mount that is closed to users.
         fs::create_dir_all(&paths.desired).expect("create directory");
 
         let (generations, unreadable) = read(&paths);

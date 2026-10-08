@@ -58,7 +58,7 @@ pub(crate) async fn start(
 
 /// Whether a task with `status` will still run: pending or running, and built by its runner.
 ///
-/// A task whose runner could not build it stays pending for good, so it does not run.
+/// A task whose runner could not build it stays pending for good and never runs.
 pub(crate) fn runs(status: &TaskStatus) -> bool {
     status.phase().is_active() && !status.reconciliation_failed()
 }

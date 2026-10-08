@@ -3,8 +3,7 @@
 //! Readers of the running LimaNix guest.
 //!
 //! A fact is a value read from the system at the moment of the call: free space, booted generation,
-//! interface addresses, failed units. Facts are not stored and need no daemon, so they work for any
-//! caller with the caller's privileges.
+//! interface addresses, failed units.
 //!
 //! | Module          | Reads                                   | Source                                  |
 //! |-----------------|-----------------------------------------|-----------------------------------------|
@@ -19,7 +18,7 @@
 //!
 //! Readers that run a program take its path from the caller: an absolute path from the platform
 //! configuration, or a `PATH` name when the configuration is unreadable. They split process I/O
-//! from a pure parser, so the parsers are tested with fixed output.
+//! from a pure parser, and tests feed the parsers fixed output.
 #![forbid(unsafe_code)]
 
 mod command;

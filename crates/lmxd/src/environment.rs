@@ -1,9 +1,9 @@
 //! Environment files of a generation.
 //!
-//! The host writes the user's `[env]` into two files next to the generation's flake, so the values
-//! stay out of the flake and the Nix store. Before a build they are installed into `/etc/limanix`,
-//! where every service reads `environment` through a systemd drop-in and login shells source
-//! `environment.sh`. Only root and the development account's group may read them.
+//! The host writes the user's `[env]` into two files next to the generation's flake, which keeps
+//! the values out of the flake and the Nix store. Before a build they are installed into
+//! `/etc/limanix`, where every service reads `environment` through a systemd drop-in and login
+//! shells source `environment.sh`. Only root and the development account's group may read them.
 
 use std::{
     fs::{self, OpenOptions, Permissions},
@@ -22,7 +22,7 @@ const FILE_MODE: u32 = 0o640;
 /// Installs the generation's environment files into `/etc/limanix`.
 ///
 /// The directory gets mode `0755`. Each file is written beside its target with mode `0640` and the
-/// group `gid`, then renamed over it, so a reader never sees half a file.
+/// group `gid`, then renamed over it; a reader never sees half a file.
 pub(crate) fn install(paths: &Paths, gid: u32) -> io::Result<()> {
     let directory = paths.environment();
     fs::create_dir_all(&directory)?;
@@ -38,7 +38,6 @@ pub(crate) fn install(paths: &Paths, gid: u32) -> io::Result<()> {
             .open(&staged)?;
         file.write_all(&content)?;
         file.sync_all()?;
-        // The creation mode is narrowed by the umask; set it exactly.
         fs::set_permissions(&staged, Permissions::from_mode(FILE_MODE))?;
         chown(&staged, None, Some(gid))?;
         fs::rename(&staged, directory.join(name))?;

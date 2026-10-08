@@ -1,8 +1,8 @@
 //! Observed state of the guest, as reported by `lmx status`.
 //!
 //! Every fact is optional: a fact that cannot be read is `null` and the reason is listed in
-//! [`Status::problems`]. One unreadable fact never hides the others, so the host can still show what
-//! it has. Generations are the exception: a stage without a marker is `null` and is not a problem,
+//! [`Status::problems`]. One unreadable fact never hides the others: the host can still show what it
+//! has. Generations are the exception: a stage without a marker is `null` and is not a problem,
 //! because a system built before `lmx` has none. A marker that exists but cannot be read is still a
 //! problem.
 
@@ -29,10 +29,6 @@ pub struct Status {
 }
 
 /// Generation identifiers of the three stages of an update.
-///
-/// The host commits the desired generation by mounting its inputs. Comparing the three values tells
-/// whether a build or a restart is still needed. A stage without a known identifier, such as a system
-/// built before `lmx` existed, is `None`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Generations {
     /// Generation mounted at `/mnt/limanix`.
@@ -45,12 +41,12 @@ pub struct Generations {
 
 /// Usage of one file system.
 ///
-/// ext4 sizes its inode table with the file system, so either limit can run out first.
+/// Either limit can run out first, because ext4 sizes its inode table with the file system.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiskUsage {
     /// Total size in bytes.
     pub bytes: u64,
-    /// Free bytes, including blocks reserved for root; the Nix daemon writes as root.
+    /// Free bytes, including blocks reserved for root.
     pub free_bytes: u64,
     /// Free bytes available to unprivileged users.
     pub available_bytes: u64,
@@ -62,10 +58,6 @@ pub struct DiskUsage {
 
 impl DiskUsage {
     /// Whether less than `percent` of the bytes or of the inodes is free.
-    ///
-    /// The test is strict and exact: `free × 100 < total × percent`. A total of zero, such as the
-    /// inodes of a file system without an inode table, never counts as low. The platform's store
-    /// guard and the LimaNix host decide the same way.
     #[must_use]
     pub fn below(&self, percent: u8) -> bool {
         let low = |free: u64, total: u64| {
@@ -100,7 +92,6 @@ pub struct Problem {
 mod tests {
     use crate::{CONTRACT_VERSION, DiskUsage, Envelope, ErrorCode, FINALIZE_FAILED, Status};
 
-    /// Usage with `free_bytes` of 1000 bytes and `free_inodes` of 1000 inodes.
     fn usage(free_bytes: u64, free_inodes: u64) -> DiskUsage {
         DiskUsage {
             bytes: 1000,
@@ -134,8 +125,6 @@ mod tests {
         assert!(!DiskUsage { bytes: 0, ..btrfs }.below(100));
     }
 
-    /// Published examples of contract version 1 are successful answers that decode and encode
-    /// without loss.
     #[test]
     fn contract_examples_round_trip() {
         for example in [
@@ -152,7 +141,6 @@ mod tests {
         }
     }
 
-    /// The published answer of a wait that a failed finalize ended decodes and encodes without loss.
     #[test]
     fn the_failed_finalize_example_round_trips() {
         let example = include_str!("../../../contract/v1/wait-finalize-failed.json");

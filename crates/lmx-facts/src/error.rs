@@ -3,9 +3,6 @@
 use std::{io, process::ExitStatus, time::Duration};
 
 /// Failure of one fact reader.
-///
-/// Callers report the failure next to the other facts instead of stopping, so every variant renders
-/// a complete sentence for people.
 #[derive(Debug, thiserror::Error)]
 pub enum FactError {
     /// A system call on a file or file system failed.

@@ -1,8 +1,4 @@
 //! Network interfaces and their global IPv4 addresses.
-//!
-//! The host selects the address it shows in `limanix list` by matching hardware addresses with the
-//! VM's shared network. The guest therefore reports every interface with its hardware address and
-//! leaves the choice to the host.
 
 use std::{net::Ipv4Addr, path::Path};
 
@@ -22,7 +18,7 @@ pub fn interfaces(ip: &Path) -> Result<Vec<Interface>, FactError> {
 struct Link {
     /// Kernel interface name.
     ifname: String,
-    /// Hardware address, or the endpoint of an IP tunnel; absent for some virtual links.
+    /// Hardware address, or the endpoint of an IP tunnel.
     #[serde(default)]
     address: Option<String>,
     /// Protocol addresses.
@@ -35,7 +31,7 @@ struct Link {
 struct Address {
     /// `inet` or `inet6`.
     family: String,
-    /// `global`, `link`, `host` and so on.
+    /// `global`, `link`, `host`, etc.
     #[serde(default)]
     scope: String,
     /// Address without prefix length.
@@ -71,8 +67,7 @@ pub fn parse(output: &[u8]) -> Result<Vec<Interface>, FactError> {
 
 /// Whether `address` is a hardware address: two-digit hexadecimal octets separated by colons.
 ///
-/// IP tunnels such as `ipip` and `sit` report their local endpoint in the same field, such as
-/// `0.0.0.0`.
+/// IP tunnels such as `ipip` and `sit` report their local endpoint in the same field.
 fn is_hardware_address(address: &str) -> bool {
     address
         .split(':')

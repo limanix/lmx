@@ -1,10 +1,10 @@
 //! Workload kinds of `lmxd` and the runner that executes them.
 //!
-//! Every operation of `lmxd` is a Solti task whose kind lives under [`API_VERSION`], so the Task API
+//! Every operation of `lmxd` is a Solti task whose kind lives under [`API_VERSION`]; the Task API
 //! lists it, streams its output and keeps its runs. Each kind runs one program. The runner turns
 //! such a task into a `solti.io/v1` subprocess task and builds it with a private subprocess runner,
-//! which clears the environment, owns the process group and captures the output. The private runner
-//! is not registered with the supervisor, so no API caller can start an arbitrary program as root.
+//! which clears the environment, owns the process group and captures the output. No API caller can
+//! start an arbitrary program as root: the private runner is not registered with the supervisor.
 
 use std::{fs, sync::Arc};
 
@@ -251,7 +251,6 @@ fn process(kind: Kind, spec: &Value, setup: &Setup) -> Process {
                     "--no-update-lock-file".into(),
                 ],
             );
-            // The user's variables come last, so they win, as with systemd's `EnvironmentFile`.
             process.env.push(("PATH".into(), SYSTEM_PATH.into()));
             if let Ok(text) = fs::read_to_string(setup.paths.environment().join("environment")) {
                 process.env.extend(environment::variables(&text));
@@ -342,7 +341,6 @@ impl Runner for LmxRunner {
             None,
             Flag::enabled(),
         ));
-        // Same name, generation and status, so output and runs belong to the `lmxd` task.
         let derived = Task::from_parts(
             task.type_meta().clone(),
             task.metadata().clone(),
@@ -408,7 +406,6 @@ mod tests {
 
     use super::*;
 
-    /// A setup with recognizable tool paths below `root`.
     fn setup(root: &Path) -> Setup {
         Setup {
             tools: Tools {

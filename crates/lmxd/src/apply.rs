@@ -164,7 +164,7 @@ enum Decision<'a> {
 /// What a request for `requested` does, given the generation markers and the running apply.
 ///
 /// A running apply of another generation is replaced even when the requested one is built: the host
-/// mounted another generation, so the older build must not finish after the answer.
+/// mounted another generation, and the older build must not finish after the answer.
 fn decide<'a>(
     requested: &str,
     generations: &Generations,
@@ -242,7 +242,6 @@ impl Applier {
                     let number = self.created.fetch_add(1, Ordering::Relaxed) + 1;
                     let name = format!("{}-{number}", Kind::SystemApply.task_prefix());
                     let run = Arc::new(Run::new(generation, name));
-                    // Join before the run starts, so the follower sees its first phase.
                     let joined = run.join();
                     *current = Some(Arc::clone(&run));
                     tokio::spawn(Arc::clone(self).drive(run));
@@ -286,7 +285,6 @@ impl Applier {
 
     /// Runs the steps of `run` and records its outcome.
     async fn drive(self: Arc<Self>, run: Arc<Run>) {
-        // `lmx logs apply` reads these with the build's lines: same task, kind and generation.
         let (task, kind, generation) = (
             run.name.as_str(),
             Kind::SystemApply.name(),
@@ -298,7 +296,6 @@ impl Applier {
             lmx_generation = generation,
             "applying generation {generation}"
         );
-        // The steps run in their own task, so even a panic gives the followers an outcome.
         let steps = tokio::spawn({
             let applier = Arc::clone(&self);
             let run = Arc::clone(&run);
@@ -310,7 +307,7 @@ impl Applier {
                 format!("The apply stopped unexpectedly: {error}"),
             ))
         });
-        // A stop cancels the build like `lmx apply cancel`, but the caller must hear that lmxd went.
+
         if outcome.is_err() && self.stopping.load(Ordering::Relaxed) {
             outcome = Err(failure(
                 ErrorCode::OwnerUnavailable,
@@ -358,7 +355,7 @@ impl Applier {
         run.event(ApplyEvent::Phase {
             phase: ApplyPhase::Reserve,
         });
-        // A collection can take minutes; a cancel leaves it running for the store guard.
+
         let mut cancel = run.cancelled.subscribe();
         tokio::select! {
             reserved = self.store.reserve() => {
@@ -380,15 +377,12 @@ impl Applier {
 
     /// Runs `nixos-rebuild boot` and passes its output to the followers.
     async fn build(&self, run: &Run) -> Result<Apply, ErrorBody> {
-        // The host may have mounted another generation meanwhile; never build it under this name.
         let (generations, _) = lmx_facts::generations::read(&self.paths.generations());
         if generations.desired.as_deref() != Some(run.generation.as_str()) {
             return Err(mismatch(&run.generation, generations.desired.as_deref()));
         }
         let name = run.name.as_str();
         let mut lines = self.capture.listen(name);
-        // Queued: a finalize in the slot finishes first. A build of another generation was
-        // cancelled by the apply that replaced it.
         let placement = Placement {
             slot: SYSTEM_SLOT,
             admission: AdmissionPolicy::Queue,
@@ -413,7 +407,6 @@ impl Applier {
             "building generation {}",
             run.generation
         );
-        // A cancel that came while the task was created did not see it.
         if run.is_cancelled() {
             let _ = self.supervisor.cancel_task(&task).await;
         }

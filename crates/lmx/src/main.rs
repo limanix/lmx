@@ -1,11 +1,13 @@
 //! # lmx
 //!
-//! Command of the LimaNix guest owner. People run it inside the VM; the LimaNix host runs it over
-//! management SSH with `--json` and reads the [host contract](https://github.com/limanix/lmx/blob/main/docs/contract.md).
+//! Command of the LimaNix guest owner. Run it inside the VM; the LimaNix host runs it over
+//! management SSH with `--json` and reads the
+//! [host contract](https://github.com/limanix/lmx/blob/main/guides/contract.md).
 //!
 //! | Command               | Kind   | Answers or does                                             |
 //! |-----------------------|--------|-------------------------------------------------------------|
 //! | `lmx help`            | facts  | the workspace and the commands inside the VM and on the Mac |
+//! | `lmx help TOPIC`      | facts  | what a module gives you, from its help card                 |
 //! | `lmx info`            | facts  | kernel, guest disk, shared folders and failed units         |
 //! | `lmx welcome`         | caller | the summary an interactive shell shows when it starts       |
 //! | `lmx status`          | facts  | generations, disk, interfaces, failed units, and `lmxd`     |
@@ -25,7 +27,7 @@
 //! `lmx status --wait converged -g G` is one too: it answers once `lmxd` reports generation G
 //! settled after a restart. `lmx status --short` prints only what needs attention, for tmux and the
 //! prompt, and never waits more than 200 ms. Caller commands act on the caller's terminal and
-//! environment, so only the caller can run them.
+//! environment, and only the caller can run them.
 //!
 //! ## Other names
 //!
@@ -40,12 +42,12 @@
 //!
 //! ## Test hooks
 //!
-//! Environment variables let tests point the binary at prepared files. `sudo` drops all of them by
-//! default, so the host never sets them by accident.
+//! Environment variables let tests point the binary at prepared files. The host never sets them by
+//! accident: `sudo` drops all of them by default.
 //!
 //! | Variable            | Replaces                                                                  |
 //! |---------------------|---------------------------------------------------------------------------|
-//! | `LMX_CONFIG`        | [`lmx_model::CONFIG_PATH`]                                                |
+//! | `LMX_CONFIG`        | [`lmx_model::CONFIG_PATH`], and [`lmx_model::HELP_PATH`] beside it        |
 //! | `LMX_SYSTEM_ROOT`   | `/` for generation markers, the store path, `/proc` and the `lmxd` socket |
 //! | `LMX_TTY_IN`        | `/dev/tty` for reading the terminal's clipboard reply                     |
 //! | `LMX_TTY_OUT`       | `/dev/tty` for writing clipboard sequences                                |
@@ -110,8 +112,6 @@ fn main() -> ExitCode {
 
     match result {
         Ok(code) => code,
-        // Standard output was closed by its reader, as in `lmx status | true`: nobody is left to
-        // read an answer or an error. clap ends `--help` the same way.
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("lmx: {error}");
@@ -122,8 +122,6 @@ fn main() -> ExitCode {
 
 /// Runs `lmx` with the arguments after the program name.
 fn lmx(mut arguments: Vec<OsString>) -> io::Result<ExitCode> {
-    // `lmx --help` and `lmx -h` are `lmx help`, so further arguments stay usage errors, as in the
-    // platform's shell `lmx`; `lmx status --help` stays generated.
     if let Some(first) = arguments.first_mut()
         && matches!(first.to_str(), Some("--help" | "-h"))
     {
@@ -132,7 +130,8 @@ fn lmx(mut arguments: Vec<OsString>) -> io::Result<ExitCode> {
     let cli = Cli::parse_from(iter::once(OsString::from("lmx")).chain(arguments));
 
     match cli.command {
-        None | Some(Command::Help) => help::run(&System::from_environment()),
+        None => help::run(&System::from_environment(), None),
+        Some(Command::Help(args)) => help::run(&System::from_environment(), args.topic.as_deref()),
         Some(Command::Info) => info::run(&System::from_environment()),
         Some(Command::Welcome) => welcome::run(&System::from_environment()),
         Some(Command::Status(args)) => status::run(&System::from_environment(), &args),
