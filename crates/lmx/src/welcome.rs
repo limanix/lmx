@@ -163,12 +163,12 @@ fn render(facts: &Facts, paint: Paint) -> String {
 }
 
 /// The label column, muted.
-fn label(paint: Paint, label: &str) -> String {
+pub(crate) fn label(paint: Paint, label: &str) -> String {
     paint.color(paint.palette().muted, &format!("{label:<LABEL$}"))
 }
 
 /// Writes `label` and `value`; further lines of the value keep the value column.
-fn row(text: &mut String, paint: Paint, name: &str, value: &str, color: Option<Color>) {
+pub(crate) fn row(text: &mut String, paint: Paint, name: &str, value: &str, color: Option<Color>) {
     let mut name = name;
     for line in wrap(value, VALUE) {
         let line = color.map_or_else(|| line.clone(), |color| paint.color(color, &line));

@@ -50,7 +50,9 @@ The platform defines two units in every generation.
 | `LimitCORE=0` | A watchdog stop does not dump the memory of every job |
 | The service does not restart on a switch | A configuration switch never stops `lmxd` in the middle of a job; the new `lmxd` arrives with the next boot |
 
-> [!NOTE] These units come from the platform of the client, in
+> [!NOTE]
+>
+> These units come from the platform of the client, in
 > [`lmx.nix`](https://github.com/limanix/client/blob/main/internal/nixos/resources/base/lmx.nix).
 > `lmx` itself ships only the two binaries.
 
@@ -68,9 +70,10 @@ another daemon still serves, and two builds never run at once.
 
 NixOS writes `/etc/lmx/config.json` as part of every generation: the VM name,
 your account, the disk thresholds, the health checks, the open ports, the
-colors, and the absolute paths of the tools `lmxd` runs. Nothing on the Mac
-changes it at runtime. Each generation carries its own configuration, and the
-two always match.
+colors, and the absolute paths of the tools `lmxd` runs. Beside it,
+`/etc/lmx/help.json` holds the help cards of the modules in the generation, for
+`lmx help TOPIC`. Nothing on the Mac changes it at runtime. Each generation
+carries its own configuration, and the two always match.
 
 <details>
 <summary>Read the daemon's own log</summary>

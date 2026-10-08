@@ -11,6 +11,28 @@ when a shell starts: the VM, its resources, modules and shared folders, plus
 warnings when services failed or the disk runs low. `lmx info` adds the kernel,
 the guest disk, the shared folders and failed services.
 
+## What did a module give me?
+
+Every module explains itself in the guest:
+
+```console
+$ lmx help python
+  Python 3.12.14
+  Python 3 with venv, virtualenv, and the Pyright language server.
+
+  Commands   python, virtualenv, pyright, python-3.12
+  New venv   python -m venv .venv && source .venv/bin/activate
+  Install    python -m pip install -r requirements.txt
+  Leave      deactivate
+
+  Guide      https://limanix.dev/categories/nixos/modules/python/README.html
+```
+
+The card matches what this VM runs: the versions it installed and the commands
+on your `PATH`. `lmx help` lists the topics, `lmx help python-3.12` and
+`lmx help lmx:python-3.12` work too, and the guide opens the module's full page.
+Your own modules can add a card with the NixOS option `limanix.help.<topic>`.
+
 ## How is the guest doing?
 
 ```console
@@ -34,8 +56,10 @@ When something needs your attention, `lmx status` adds a `Condition` line that
 says what and why. A fact that cannot be read becomes `unknown`, and a `Problem`
 line explains it; the other lines still show.
 
-> [!TIP] Without `sudo`, the generation the Mac mounted may read as `unknown`:
-> that mount is open to root only. `sudo lmx status` shows every fact.
+> [!TIP]
+>
+> Without `sudo`, the generation the Mac mounted may read as `unknown`: that
+> mount is open to root only. `sudo lmx status` shows every fact.
 
 ### The status word in tmux and the prompt
 
@@ -67,7 +91,9 @@ terminal on the Mac must allow it; reading the clipboard usually needs one more
 permission than writing. `pbpaste` waits up to 10 seconds for the terminal to
 answer. They are other names of `lmx clipboard copy` and `lmx clipboard paste`.
 
-> [!NOTE] Clipboard access is a terminal setting on the Mac.
+> [!NOTE]
+>
+> Clipboard access is a terminal setting on the Mac.
 > [Terminal and clipboard](https://limanix.dev/terminal.html) lists the settings
 > for common terminals.
 

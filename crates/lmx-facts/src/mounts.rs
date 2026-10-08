@@ -69,7 +69,7 @@ fn unescape(field: &str) -> String {
     let bytes = field.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
     let mut index = 0;
-    
+
     while index < bytes.len() {
         let escaped = (bytes[index] == b'\\')
             .then(|| bytes.get(index + 1..index + 4))

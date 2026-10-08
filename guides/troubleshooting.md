@@ -36,8 +36,10 @@ It checks the configuration that NixOS wrote for `lmx`, whether `lmxd` answers
 with the same version as `lmx`, the state of the generations, and the disk. It
 works even when `lmxd` is down: that is one of the things it finds.
 
-> [!TIP] On the Mac, `limanix doctor NAME` runs the same checks and adds the VM
-> state and its address.
+> [!TIP]
+>
+> On the Mac, `limanix doctor NAME` runs the same checks and adds the VM state
+> and its address.
 
 ## `lmx net check PORT`
 

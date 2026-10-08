@@ -67,6 +67,8 @@ smaller module selection may still fit.
 
 </details>
 
-> [!NOTE] Builds have their own safety net. Nix frees space by itself when free
-> bytes drop too low in the middle of a build; `lmxd` covers inodes and the time
+> [!NOTE]
+>
+> Builds have their own safety net. Nix frees space by itself when free bytes
+> drop too low in the middle of a build; `lmxd` covers inodes and the time
 > between builds.

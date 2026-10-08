@@ -19,13 +19,13 @@ pub(crate) struct Cli {
 /// Commands of `lmx`.
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Show the workspace and the commands inside this VM and on the Mac.
+    /// Show the workspace and its commands, or what a module gives you.
     // `lmx help --help` and `lmx help -h` print the page too, as the platform's shell `lmx` did.
     #[command(
         disable_help_flag = true,
         arg = Arg::new("help").short('h').long("help").action(ArgAction::SetTrue).hide(true)
     )]
-    Help,
+    Help(HelpArgs),
     /// Show the kernel, guest disk, shared folders and failed units.
     Info,
     /// Show the workspace welcome again.
@@ -54,6 +54,13 @@ pub(crate) enum Command {
 }
 
 /// Arguments of `lmx status`.
+/// Arguments of `lmx help`.
+#[derive(Debug, Args)]
+pub(crate) struct HelpArgs {
+    /// Module to explain, such as `python`, `python-3.12` or `lmx:python-3.12`.
+    pub(crate) topic: Option<String>,
+}
+
 #[derive(Debug, Args)]
 pub(crate) struct StatusArgs {
     /// Print only what needs attention, such as `restart`, for tmux and the prompt.

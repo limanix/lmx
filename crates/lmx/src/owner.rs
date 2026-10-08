@@ -115,7 +115,7 @@ pub(crate) fn apply(
             .await
             .map_err(|status| CallError::from_status(&status))?
             .into_inner();
-        
+
         loop {
             let message = events
                 .message()

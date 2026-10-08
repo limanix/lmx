@@ -11,7 +11,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE_URL = "https://github.com/limanix/lmx/blob/{ref}/"
-# A link that leaves guides/, such as ../contract/v1/status.json, names a repository file.
 REPOSITORY_LINK = re.compile(r"\]\(\.\./([^)#\s]+)(#[^)\s]*)?\)")
 REF = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)|[0-9a-f]{40}")
 

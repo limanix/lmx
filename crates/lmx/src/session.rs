@@ -28,7 +28,7 @@ pub(crate) fn run(config: &Result<Config, String>, name: &OsStr) -> ExitCode {
             return ExitCode::from(output::FAILURE);
         }
     };
-    
+
     let Some(provider) = config
         .session
         .command

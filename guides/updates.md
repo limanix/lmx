@@ -102,8 +102,10 @@ Mac runs `lmx apply cancel`, waits until the build stops, and brings the guest's
 own `lmxd` back. The VM keeps running the generation it ran before, and the
 update ends with status 130.
 
-> [!NOTE] A boot loader update that `nixos-rebuild` already started finishes in
-> its own unit. Stopping it halfway could leave the boot entries half-written.
+> [!NOTE]
+>
+> A boot loader update that `nixos-rebuild` already started finishes in its own
+> unit. Stopping it halfway could leave the boot entries half-written.
 
 ## When a step fails
 
@@ -114,5 +116,7 @@ update ends with status 130.
 | `Degraded` after the restart | G runs, but a service, mount or the login shell failed its check. | `lmx doctor`, then `sudo lmx logs health` |
 | "ready, but lmx reported: Finalizing … failed" | G works. Only the cleanup failed, and `lmxd` retries it. | `sudo lmx logs finalize` |
 
-> [!TIP] After the restart, the build ran in the *previous* boot. Read its
-> output with `sudo lmx logs apply --previous`.
+> [!TIP]
+>
+> After the restart, the build ran in the *previous* boot. Read its output with
+> `sudo lmx logs apply --previous`.

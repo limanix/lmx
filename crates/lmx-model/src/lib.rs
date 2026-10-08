@@ -9,6 +9,7 @@
 //! | Type            | Written by                                        | Read by          |
 //! |-----------------|---------------------------------------------------|------------------|
 //! | [`Config`]      | NixOS, into [`CONFIG_PATH`]                       | `lmx` and `lmxd` |
+//! | [`Help`]        | NixOS, into [`HELP_PATH`]                         | `lmx help TOPIC` |
 //! | [`Envelope`]    | every `lmx … --json` answer                       | the LimaNix host |
 //! | [`Status`]      | `lmx status`                                      | every caller     |
 //! | [`Owner`]       | `lmxd`, through `lmx status`                      | every caller     |
@@ -22,14 +23,15 @@
 //! JSON field names are `snake_case`. The host contract is versioned by [`CONTRACT_VERSION`] and
 //! the configuration by [`CONFIG_SCHEMA`]; each changes only with a deliberate migration.
 //!
-//! The crate performs no I/O except [`Config::load`]. Reading the running system belongs to
-//! `lmx-facts`.
+//! The crate performs no I/O except [`Config::load`] and [`Help::load`]. Reading the running system
+//! belongs to `lmx-facts`.
 #![forbid(unsafe_code)]
 
 mod apply;
 mod check;
 mod config;
 mod contract;
+mod help;
 mod owner;
 mod status;
 mod store;
@@ -44,6 +46,7 @@ pub use config::{
     Theme, Tools, User, Vm,
 };
 pub use contract::{CONTRACT_VERSION, Envelope, ErrorBody, ErrorCode};
+pub use help::{Card, HELP_PATH, HELP_SCHEMA, Help, HelpError, Tip};
 pub use owner::{
     CONVERGED, Condition, DEGRADED, DISK_LOW, FINALIZE_FAILED, OUT_OF_DATE, Operation, Owner,
     RESTART_REQUIRED,

@@ -148,6 +148,19 @@ impl Guest {
             }
         });
         guest.write("etc/lmx/config.json", &config.to_string());
+        let help = json!({
+            "schema": 1,
+            "topics": {
+                "python": {
+                    "title": "Python 3.12.14",
+                    "summary": "Python 3 with venv, virtualenv, and the Pyright language server.",
+                    "commands": ["python", "virtualenv", "pyright", "python-3.12"],
+                    "tips": [{"label": "New venv", "text": "python -m venv .venv"}],
+                    "guide": "https://limanix.dev/categories/nixos/modules/python/README.html"
+                }
+            }
+        });
+        guest.write("etc/lmx/help.json", &help.to_string());
         guest
     }
 
@@ -454,16 +467,50 @@ fn help_without_metadata_lists_commands_and_fails() {
 }
 
 #[test]
-fn help_takes_no_other_arguments() {
+fn help_shows_the_card_of_a_topic_by_name_selector_or_version_line() {
+    let guest = Guest::new();
+    for topic in ["python", "python-3.12", "lmx:python-3.12"] {
+        let output = guest.lmx(&["help", topic], &guest.config());
+        assert!(output.status.success(), "{topic}");
+        let text = String::from_utf8(output.stdout).expect("UTF-8 text");
+        assert!(text.starts_with("  Python 3.12.14\n"), "{topic}: {text}");
+        assert!(
+            text.contains("  Commands   python, virtualenv, pyright, python-3.12\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("  New venv   python -m venv .venv\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "  Guide      https://limanix.dev/categories/nixos/modules/python/README.html\n"
+            ),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn help_for_an_unknown_topic_lists_the_topics_and_fails() {
     let guest = Guest::new();
     for args in [
-        &["--help", "extra"][..],
+        &["help", "golang"][..],
+        &["--help", "extra"],
         &["-h", "status"],
-        &["help", "extra"],
     ] {
         let output = guest.lmx(args, &guest.config());
-        assert_eq!(output.status.code(), Some(2), "{args:?}");
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains("; topics: python"), "{args:?}: {error}");
     }
+}
+
+#[test]
+fn help_takes_one_topic() {
+    let guest = Guest::new();
+    let output = guest.lmx(&["help", "python", "go"], &guest.config());
+    assert_eq!(output.status.code(), Some(2));
 }
 
 #[test]

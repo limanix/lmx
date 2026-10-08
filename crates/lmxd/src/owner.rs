@@ -167,6 +167,7 @@ async fn forward(
     }
 }
 
+/// Error answered to a caller that is not root.
 fn denied(message: &str) -> ErrorBody {
     ErrorBody {
         code: ErrorCode::PermissionDenied,

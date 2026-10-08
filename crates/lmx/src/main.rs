@@ -7,6 +7,7 @@
 //! | Command               | Kind   | Answers or does                                             |
 //! |-----------------------|--------|-------------------------------------------------------------|
 //! | `lmx help`            | facts  | the workspace and the commands inside the VM and on the Mac |
+//! | `lmx help TOPIC`      | facts  | what a module gives you, from its help card                 |
 //! | `lmx info`            | facts  | kernel, guest disk, shared folders and failed units         |
 //! | `lmx welcome`         | caller | the summary an interactive shell shows when it starts       |
 //! | `lmx status`          | facts  | generations, disk, interfaces, failed units, and `lmxd`     |
@@ -46,7 +47,7 @@
 //!
 //! | Variable            | Replaces                                                                  |
 //! |---------------------|---------------------------------------------------------------------------|
-//! | `LMX_CONFIG`        | [`lmx_model::CONFIG_PATH`]                                                |
+//! | `LMX_CONFIG`        | [`lmx_model::CONFIG_PATH`], and [`lmx_model::HELP_PATH`] beside it        |
 //! | `LMX_SYSTEM_ROOT`   | `/` for generation markers, the store path, `/proc` and the `lmxd` socket |
 //! | `LMX_TTY_IN`        | `/dev/tty` for reading the terminal's clipboard reply                     |
 //! | `LMX_TTY_OUT`       | `/dev/tty` for writing clipboard sequences                                |
@@ -129,7 +130,8 @@ fn lmx(mut arguments: Vec<OsString>) -> io::Result<ExitCode> {
     let cli = Cli::parse_from(iter::once(OsString::from("lmx")).chain(arguments));
 
     match cli.command {
-        None | Some(Command::Help) => help::run(&System::from_environment()),
+        None => help::run(&System::from_environment(), None),
+        Some(Command::Help(args)) => help::run(&System::from_environment(), args.topic.as_deref()),
         Some(Command::Info) => info::run(&System::from_environment()),
         Some(Command::Welcome) => welcome::run(&System::from_environment()),
         Some(Command::Status(args)) => status::run(&System::from_environment(), &args),

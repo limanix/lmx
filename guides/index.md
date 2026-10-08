@@ -22,6 +22,7 @@ flowchart LR
 | I want to… | Run in the guest |
 | -- | -- |
 | See what this VM is and which commands exist | `lmx help` |
+| See what a module gave me: commands, tips, guide | `lmx help python` |
 | Check disk space, generations and failed services | `lmx status` |
 | Find out what is wrong and what to do | `lmx doctor` |
 | Learn why the Mac cannot reach my service on a port | `lmx net check 8080` |
@@ -29,8 +30,10 @@ flowchart LR
 | Read the build output of the last update | `sudo lmx logs apply --previous` |
 | Make room in the Nix store now | `sudo lmx store reserve` |
 
-> [!TIP] `lmx help` prints the same list right in the guest, with the commands
-> for the Mac next to it.
+> [!TIP]
+>
+> `lmx help` prints the same list right in the guest, with the commands for the
+> Mac next to it.
 
 ## What to read next
 
@@ -44,8 +47,10 @@ flowchart LR
 | [Host contract](contract.md) | Read the exact JSON the Mac and `lmx` exchange |
 | [Development](development.md) | Change `lmx` itself: checks, crates and releases |
 
-> [!NOTE] The guest keeps working when `lmxd` is down. You lose updates and
-> store upkeep until it is back, not your shell, files or services.
+> [!NOTE]
+>
+> The guest keeps working when `lmxd` is down. You lose updates and store upkeep
+> until it is back, not your shell, files or services.
 
 ```{toctree}
 :hidden:

@@ -3,8 +3,10 @@
 The LimaNix host runs `sudo lmx <command> --json` over management SSH and reads
 one JSON answer from standard output. This page defines contract version 1.
 
-> [!NOTE] This page is for people who change the LimaNix client or build their
-> own tools on top of `lmx`. For day-to-day use, start with
+> [!NOTE]
+>
+> This page is for people who change the LimaNix client or build their own tools
+> on top of `lmx`. For day-to-day use, start with
 > [Everyday commands](everyday.md).
 
 ## Read one answer
