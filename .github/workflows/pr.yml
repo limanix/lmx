@@ -16,33 +16,30 @@ jobs:
   markdown:
     name: Markdown formatting
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: mr-chelyshkin/actions/invoke-taskfile@v1
+      - uses: mr-chelyshkin/actions/task-run@v2
         with:
-          command: ci/markdown/fmt
+          task: ci/markdown/fmt
 
   docs:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: mr-chelyshkin/actions/invoke-taskfile@v1
+      - uses: mr-chelyshkin/actions/task-run@v2
         with:
-          command: docs/prepare
+          task: docs/prepare
 
   rust:
     needs: [markdown, docs]
-    uses: mr-chelyshkin/actions/.github/workflows/pr-rust.yml@v1
+    uses: mr-chelyshkin/actions/.github/workflows/ci-rust.yml@v2
     permissions:
       contents: read
     with:
-      cache-path: .cache/rust
       cache-key-prefix: lmx-rust-v1
       cache-dependency-path: |
         Cargo.lock
@@ -53,7 +50,6 @@ jobs:
     name: Release build (${{ matrix.arch }})
     needs: rust
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -66,22 +62,23 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .cache/rust
-          key: lmx-rust-v1-${{ runner.os }}-${{ runner.arch }}-release-${{ matrix.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'rust-toolchain.toml') }}
+          key: lmx-rust-v1-${{ runner.os }}-${{ runner.arch }}-release-${{ matrix.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'rust-toolchain.toml') }}-${{ github.sha }}
           restore-keys: |
+            lmx-rust-v1-${{ runner.os }}-${{ runner.arch }}-release-${{ matrix.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'rust-toolchain.toml') }}-
             lmx-rust-v1-${{ runner.os }}-${{ runner.arch }}-release-${{ matrix.arch }}-
       - name: Build the release archive
-        uses: mr-chelyshkin/actions/invoke-taskfile@v1
+        uses: mr-chelyshkin/actions/task-run@v2
         with:
-          command: release/build ARCH=${{ matrix.arch }}
+          task: release/build
+          args: ARCH=${{ matrix.arch }}
 
   gate:
     if: always()
     needs: [markdown, docs, rust, release]
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
     permissions:
       contents: read
     steps:
-      - uses: mr-chelyshkin/actions/check-job-results@v1
+      - uses: mr-chelyshkin/actions/job-results-check@v2
         with:
           results: ${{ toJSON(needs) }}

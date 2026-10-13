@@ -10,16 +10,16 @@ Every task runs in a container, the same one CI uses.
 | Task | Does |
 | -- | -- |
 | `task ci/rust/fmt` | Checks Rust formatting |
-| `task ci/rust/clippy` | Lints every target and denies warnings |
+| `task ci/rust/lint` | Lints every target and denies warnings |
 | `task ci/rust/test` | Runs unit and integration tests |
-| `task ci/rust/docs/check` | Builds the API documentation and denies rustdoc warnings |
+| `task ci/rust/docs` | Builds the API documentation and denies rustdoc warnings |
 | `task ci/rust/audit` | Scans dependencies for advisories |
 | `task ci/markdown/fmt` | Checks Markdown formatting |
 | `task docs/prepare` | Prepares these guides for the LimaNix site in `build/docs` |
 | `task release/build [ARCH=…]` | Builds `dist/lmx-<version>-<ARCH>-linux.tar.gz` and its checksum, for `aarch64` or `x86_64`; the current machine's by default |
 
-A pull request runs all of them. `task rust/fix` and `task markdown/fix` apply
-the formatting that the checks expect.
+A pull request runs all of them. `task rust/fmt/fix` and `task markdown/fix`
+apply the formatting that the checks expect.
 
 ## How the code is split
 

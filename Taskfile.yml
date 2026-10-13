@@ -3,16 +3,16 @@ version: '3.53.1'
 
 includes:
   rust:
-    # v0.0.5
-    taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/81255f635d839a2b46417720676cd2bebfc10cff/taskfiles/rust/Taskfile.yml
+    # v0.1.0
+    taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/3aa8c569bdc71b41fa50fc33f66e2ef1317813ed/taskfiles/rust/Taskfile.yml
     internal: true
   python:
-    # v0.0.5
-    taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/81255f635d839a2b46417720676cd2bebfc10cff/taskfiles/python/Taskfile.yml
+    # v0.1.0
+    taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/3aa8c569bdc71b41fa50fc33f66e2ef1317813ed/taskfiles/python/Taskfile.yml
     internal: true
   markdown:
-    # v0.0.5
-    taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/81255f635d839a2b46417720676cd2bebfc10cff/taskfiles/markdown/Taskfile.yml
+    # v0.1.0
+    taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/3aa8c569bdc71b41fa50fc33f66e2ef1317813ed/taskfiles/markdown/Taskfile.yml
     internal: true
 
 vars:
@@ -25,13 +25,12 @@ tasks:
     desc: Check Rust formatting
     cmds:
       - task: rust:fmt
-        vars: { FMT_ARGS: '--all --check' }
 
-  ci/rust/clippy:
+  ci/rust/lint:
     desc: Run Rust Clippy
     cmds:
-      - task: rust:clippy
-        vars: { CLIPPY_ARGS: '--workspace --all-targets --locked -- -D warnings' }
+      - task: rust:lint
+        vars: { LINT_ARGS: '--workspace --all-targets --locked -- -D warnings' }
 
   ci/rust/test:
     desc: Run Rust tests
@@ -39,11 +38,11 @@ tasks:
       - task: rust:test
         vars: { TEST_ARGS: '--workspace --locked' }
 
-  ci/rust/docs/check:
+  ci/rust/docs:
     desc: Run Rust docs checks
     cmds:
-      - task: rust:doc/build
-        vars: { DOC_ARGS: '--workspace --no-deps --document-private-items --locked' }
+      - task: rust:docs
+        vars: { DOCS_ARGS: '--workspace --no-deps --document-private-items --locked' }
 
   ci/rust/audit:
     desc: Run Rust audit
@@ -55,22 +54,19 @@ tasks:
     cmds:
       - task: markdown:fmt
         vars:
-          FMT_PATHS: '{{.markdown_paths}}'
-          TASK_CONTEXT:
-            ref: 'merge (dict) (dict "CONTAINER_MOUNT_MODE" "ro") (.TASK_CONTEXT | default .)'
+          FMT_ARGS: '{{.markdown_paths}}'
 
   rust/fmt/fix:
     desc: Fix format Rust sources
     cmds:
       - task: rust:fmt/fix
-        vars: { FMT_ARGS: '--all' }
 
   markdown/fix:
     desc: Fix format Markdown sources
     cmds:
       - task: markdown:fmt/fix
         vars:
-          FMT_PATHS: '{{.markdown_paths}}'
+          FMT_ARGS: '{{.markdown_paths}}'
 
   docs/prepare:
     desc: Prepare LimaNix site docs
@@ -83,7 +79,7 @@ tasks:
           git -C {{.ROOT_DIR | shellQuote}} rev-parse HEAD
           {{end}}
     cmds:
-      - task: python:_uv/tool
+      - task: python:exec
         vars:
           CMD: python scripts/build_docs.py --ref {{.lmx_ref | shellQuote}}
 
@@ -96,7 +92,7 @@ tasks:
     vars:
       ARCH: '{{.ARCH | default (ARCH | replace "arm64" "aarch64" | replace "amd64" "x86_64")}}'
     cmds:
-      - task: rust:_cargo/tool
+      - task: rust:exec
         vars:
           RUSTFLAGS: -D warnings
           CMD: sh scripts/release-archive.sh {{.version}} {{.ARCH}}

@@ -583,18 +583,20 @@ fn welcome_summarizes_the_vm() {
     for line in [
         "  ▲ owner    lmxd does not answer; run lmx doctor\n",
         "  ▲ failed   limanix-store-guard.service; run systemctl --failed\n",
-        "  VM         dev-box (NixOS 26.05, arm64), up 3 h\n",
-        "  Network    192.0.2.10, ports tcp 8080\n",
-        "  Modules    none\n",
-        "  Shared     /home/dev     rw\n             /mnt/limanix  ro\n",
+        "dev-box  ▲ owner",
+        "NixOS 26.05, arm64",
+        "  Uptime  3 h\n",
+        "  NETWORK\n  192.0.2.10\n  TCP 8080\n",
+        "MODULES 0",
+        "  SHARED\n  /home/dev     rw\n  /mnt/limanix  ro\n",
+        "https://github.com/limanix",
+        "https://limanix.dev",
+        "nix profile add nixpkgs#ripgrep",
+        "nix profile remove ripgrep",
     ] {
         assert!(text.contains(line), "{line}{text}");
     }
-    assert!(text.contains(", 7.6 GiB memory\n"), "{text}");
-    assert!(
-        !text.contains("  tip  "),
-        "attention replaces the tip: {text}"
-    );
+    assert!(text.contains("  RAM     7.6 GiB\n"), "{text}");
 }
 
 #[test]
@@ -603,8 +605,7 @@ fn welcome_without_metadata_still_greets() {
     let output = guest.lmx(&["welcome"], &guest.path("missing.json"));
     assert!(output.status.success());
     assert!(
-        String::from_utf8_lossy(&output.stdout)
-            .contains("  VM         unknown (workspace metadata cannot be read)\n")
+        String::from_utf8_lossy(&output.stdout).contains("  workspace metadata cannot be read\n")
     );
 }
 
@@ -615,8 +616,7 @@ fn welcome_fails_without_the_mount_table() {
     let output = guest.lmx(&["welcome"], &guest.config());
     assert_eq!(output.status.code(), Some(1));
     assert!(
-        String::from_utf8_lossy(&output.stdout)
-            .contains("  Shared     unavailable; run lmx info\n")
+        String::from_utf8_lossy(&output.stdout).contains("  SHARED\n  unavailable; run lmx info\n")
     );
 }
 
