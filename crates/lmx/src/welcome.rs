@@ -1,10 +1,4 @@
 //! `lmx welcome`: the summary an interactive shell shows when it starts.
-//!
-//! Below the logo comes the state of the guest: one line when nothing needs attention, or one line
-//! for each thing that does, with the command that helps. Then the VM, resources, disk, network,
-//! modules and shared folders, a tip when nothing needs attention, and the next commands. Labels
-//! take 11 columns after a two-column indent, and values wrap so no line is wider than 80 columns.
-//! Facts are read first, and rendering is a pure function of them.
 
 use std::{
     io,
@@ -34,45 +28,35 @@ use crate::{
 const LABEL: usize = 11;
 /// Columns left for a value: 80 minus the indent and the label.
 const VALUE: usize = 67;
-/// Widest shared-folder target before it wraps, leaving room for the mode.
-const TARGET: usize = 63;
-/// Columns of each logo line drawn in blue; the rest is mauve.
-const LOGO_SPLIT: usize = 36;
+/// Columns available after the two-column page indent.
+const WIDTH: usize = 78;
+/// Columns reserved for guest details.
+const LEFT: usize = 42;
+/// Columns separating guest details and modules.
+const GAP: usize = 4;
+/// Columns reserved for selected modules.
+const RIGHT: usize = WIDTH - LEFT - GAP;
+/// Columns of a label inside the guest column.
+const DETAIL: usize = 8;
+/// Maximum number of module names before an ellipsis.
+const MODULE_LIMIT: usize = 20;
 /// Warning threshold when the configuration, and with it the platform policy, is unreadable.
 const DEFAULT_MINIMUM_PERCENT: u8 = 10;
 /// How long the welcome waits for `lmxd`; a shell must start quickly.
 const OWNER_TIMEOUT: Duration = Duration::from_millis(500);
-/// Cells of the disk bar.
-const BAR: usize = 20;
 /// Characters of a generation identifier that the welcome shows.
 const GENERATION: usize = 7;
 /// Name prefixes of container and virtual interfaces, whose addresses the Mac does not use.
 const VIRTUAL: [&str; 11] = [
     "docker", "br-", "veth", "virbr", "cni", "flannel", "cali", "vxlan", "kube", "lxc", "podman",
 ];
-/// Tips that hold in every guest: a command, then what it does.
-const TIPS: [(&str, &str); 3] = [
-    ("pbcopy < FILE", " copies a file to your Mac clipboard."),
-    (
-        "lmx net check PORT",
-        " explains why the Mac cannot reach a port.",
-    ),
-    (
-        "lmx doctor",
-        " finds what is wrong with the guest and what to do.",
-    ),
-];
-
-/// The LimaNix logo.
-const LOGO: [&str; 8] = [
-    "888      d8b                        888b    888 d8b",
-    "888      Y8P                        8888b   888 Y8P",
-    "888                                 88888b  888",
-    "888      888 88888b.d88b.   8888b.  888Y88b 888 888 888  888",
-    r#"888      888 888 "888 "88b     "88b 888 Y88b888 888 `Y8bd8P'"#,
-    "888      888 888  888  888 .d888888 888  Y88888 888   X88K",
-    r#"888      888 888  888  888 888  888 888   Y8888 888 .d8""8b."#,
-    r#"88888888 888 888  888  888 "Y888888 888    Y888 888 888  888"#,
+/// The intertwined X mark.
+const LOGO: [&str; 4] = ["╲ ╲  ╱ ╱", " ╲ ╲╱ ╱", " ╱ ╱╲ ╲", "╱ ╱  ╲ ╲"];
+/// Commands below the summary, with their descriptions.
+const COMMANDS: [(&str, &str); 3] = [
+    ("lmx help", "Explore commands"),
+    ("nix profile add nixpkgs#ripgrep", "Install a package"),
+    ("nix profile remove ripgrep", "Remove a package"),
 ];
 
 /// Everything the welcome shows.
@@ -82,8 +66,8 @@ struct Facts {
     name: String,
     /// Operating system and architecture, such as `NixOS 26.05, arm64`.
     system: String,
-    /// Selected catalog modules, or `none`.
-    modules: String,
+    /// Selected catalog modules, or `None` when the configuration cannot be read.
+    modules: Option<Vec<String>>,
     /// Free share below which the disk warning appears, in percent.
     minimum_percent: u8,
     /// Generation of the running configuration, when readable.
@@ -110,8 +94,35 @@ struct Facts {
     failed_units: Vec<String>,
     /// State of `lmxd`, or `None` when it does not answer in time.
     owner: Option<Owner>,
-    /// Tip for when nothing needs attention: a command, then what it does.
-    tip: Option<(String, String)>,
+}
+
+/// A rendered line and its width before color sequences were added.
+#[derive(Debug)]
+struct Line {
+    /// Text, possibly containing color sequences.
+    text: String,
+    /// Visible terminal columns.
+    width: usize,
+}
+
+impl Line {
+    /// Pairs visible text with its styled representation.
+    fn new(plain: &str, text: String) -> Self {
+        Self {
+            text,
+            width: columns(plain),
+        }
+    }
+
+    /// Text in one color, measured before styling.
+    fn colored(paint: Paint, color: Color, text: &str) -> Self {
+        Self::new(text, paint.color(color, text))
+    }
+
+    /// An empty line between groups.
+    fn blank() -> Self {
+        Self::new("", String::new())
+    }
 }
 
 /// One thing that needs attention, and the command that helps.
@@ -150,7 +161,7 @@ fn collect(system: &System) -> Facts {
         Ok(config) => (
             config.vm.name.clone(),
             format!("{}, {}", config.vm.system, config.vm.arch),
-            selected(&config.modules),
+            Some(selected(&config.modules)),
             config.disk.minimum_percent,
             Some(config.generation.clone()),
             Some(config.network.ports.clone()),
@@ -158,7 +169,7 @@ fn collect(system: &System) -> Facts {
         Err(_) => (
             "unknown".to_owned(),
             "workspace metadata cannot be read".to_owned(),
-            "unknown".to_owned(),
+            None,
             DEFAULT_MINIMUM_PERCENT,
             None,
             None,
@@ -187,20 +198,15 @@ fn collect(system: &System) -> Facts {
         mounts: mounts::shared(&system.mountinfo()).ok(),
         failed_units: units::failed(&system.systemctl()).unwrap_or_default(),
         owner: owner::status_within(&system.owner_socket(), OWNER_TIMEOUT).ok(),
-        tip: tip(system, now),
     }
 }
 
-/// The selected modules without the catalog's `lmx:` prefix, or `none`.
-fn selected(modules: &[String]) -> String {
-    if modules.is_empty() {
-        return "none".to_owned();
-    }
+/// The selected modules in declaration order, without the catalog's `lmx:` prefix.
+fn selected(modules: &[String]) -> Vec<String> {
     modules
         .iter()
-        .map(|module| module.strip_prefix("lmx:").unwrap_or(module))
-        .collect::<Vec<_>>()
-        .join(", ")
+        .map(|module| module.strip_prefix("lmx:").unwrap_or(module).to_owned())
+        .collect()
 }
 
 /// Addresses of the guest's own interfaces, leaving out container and virtual networks.
@@ -216,53 +222,28 @@ fn addresses(interfaces: &[Interface]) -> Vec<String> {
         .collect()
 }
 
-/// A tip that changes from shell to shell; every other one points to a selected module's card.
-fn tip(system: &System, now: SystemTime) -> Option<(String, String)> {
-    let seed = now
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map_or(0, |since| {
-            usize::try_from(since.subsec_nanos()).unwrap_or(0)
-        });
-    let module = system.help().ok().and_then(|help| {
-        let modules = system
-            .config
-            .as_ref()
-            .map_or(&[][..], |config| config.modules.as_slice());
-        modules
-            .iter()
-            .find_map(|module| help.find(module).map(|(topic, _)| topic.to_owned()))
-            .or_else(|| help.topics.keys().next().cloned())
-    });
-    if let Some(topic) = module
-        && seed.is_multiple_of(2)
-    {
-        return Some((
-            format!("lmx help {topic}"),
-            format!(" shows what the {topic} module gives you."),
-        ));
-    }
-    let (command, text) = TIPS[seed / 2 % TIPS.len()];
-    Some((command.to_owned(), text.to_owned()))
-}
-
 /// Renders the welcome.
 fn render(facts: &Facts, paint: Paint) -> String {
     let palette = paint.palette();
     let mut text = String::from("\n");
-    for line in LOGO {
-        let (left, right) = line.split_at(LOGO_SPLIT.min(line.len()));
-        text.push_str(&format!(
-            "  {}{}\n",
-            paint.color(palette.blue, left),
-            paint.color(palette.mauve, right)
-        ));
-    }
-    text.push('\n');
-
     let attention = attention(facts);
-    if attention.is_empty() {
-        let (word, value, color) = settled(facts, paint);
-        state(&mut text, paint, ("●", word, color), &value, None);
+    let left = guest(facts, paint, &attention);
+    let right = modules(facts, paint);
+    for index in 0..left.len().max(right.len()) {
+        let left = left.get(index);
+        let right = right.get(index);
+        let value = left.map_or("", |line| line.text.as_str());
+        if let Some(right) = right.filter(|line| !line.text.is_empty()) {
+            let padding = LEFT + GAP - left.map_or(0, |line| line.width);
+            text.push_str(&format!("  {value}{:padding$}{}\n", "", right.text));
+        } else if value.is_empty() {
+            text.push('\n');
+        } else {
+            text.push_str(&format!("  {value}\n"));
+        }
+    }
+    if !attention.is_empty() {
+        text.push('\n');
     }
     for item in &attention {
         state(
@@ -273,41 +254,18 @@ fn render(facts: &Facts, paint: Paint) -> String {
             Some(&item.command),
         );
     }
-    text.push('\n');
-
-    vm(&mut text, facts, paint);
-    let resources = resources(facts);
-    if !resources.is_empty() {
-        row(&mut text, paint, "Resources", &resources, None);
-    }
-    if let Some(usage) = facts.disk {
-        disk(&mut text, facts, usage, paint);
-    }
-    if let Some(network) = network(facts) {
-        row(&mut text, paint, "Network", &network, None);
-    }
-    row(&mut text, paint, "Modules", &facts.modules, None);
-    shared(&mut text, facts, paint);
-    text.push('\n');
-
-    if attention.is_empty()
-        && let Some((command, rest)) = &facts.tip
-    {
+    text.push_str(&format!(
+        "\n  {}\n\n",
+        paint.color(palette.muted, &"─".repeat(WIDTH))
+    ));
+    for (command, description) in COMMANDS {
         text.push_str(&format!(
-            "  {}  {}{rest}\n",
-            paint.color(palette.muted, "tip"),
-            paint.color(palette.blue, command)
+            "  {}  {}\n",
+            paint.color(palette.blue, &format!("{command:<35}")),
+            paint.color(palette.subtext, description)
         ));
     }
-    text.push_str(&format!(
-        "  {}{}{}{}{}{}\n\n",
-        paint.color(palette.blue, "lmx help"),
-        paint.color(palette.muted, " for commands, "),
-        paint.color(palette.blue, "lmx status"),
-        paint.color(palette.muted, " for details, "),
-        paint.color(palette.blue, "exit"),
-        paint.color(palette.muted, " to return to the Mac.")
-    ));
+    text.push('\n');
     text
 }
 
@@ -493,92 +451,193 @@ pub(crate) fn row(text: &mut String, paint: Paint, name: &str, value: &str, colo
     }
 }
 
-/// The VM name in bold, its system and uptime, on one line when they fit.
-fn vm(text: &mut String, facts: &Facts, paint: Paint) {
-    let up = facts
-        .uptime
-        .map(|uptime| format!(", up {}", span(uptime)))
-        .unwrap_or_default();
-    let system = format!("({}){up}", facts.system);
-    if columns(&facts.name) + 1 + columns(&system) <= VALUE {
-        text.push_str(&format!(
-            "  {}{} {}\n",
-            label(paint, "VM"),
-            paint.bold(&facts.name),
-            paint.color(paint.palette().subtext, &system)
+/// The left column: branding, state and the facts known about the guest.
+fn guest(facts: &Facts, paint: Paint, attention: &[Attention]) -> Vec<Line> {
+    let palette = paint.palette();
+    let mut lines = Vec::new();
+    let captions = [
+        "LimaNix",
+        "https://github.com/limanix",
+        "https://limanix.dev",
+        "",
+    ];
+    for (mark, caption) in LOGO.into_iter().zip(captions) {
+        let color = if caption == "LimaNix" {
+            palette.blue
+        } else {
+            palette.subtext
+        };
+        let plain = if caption.is_empty() {
+            mark.to_owned()
+        } else {
+            format!("{mark:<8}  {caption}")
+        };
+        let text = if caption.is_empty() {
+            paint.color(palette.blue, mark)
+        } else {
+            format!(
+                "{}  {}",
+                paint.color(palette.blue, &format!("{mark:<8}")),
+                paint.color(color, caption)
+            )
+        };
+        lines.push(Line::new(&plain, text));
+    }
+    lines.push(Line::blank());
+
+    let (word, value, color) = settled(facts, paint);
+    let (mark, word, color) = attention.first().map_or(("●", word, color), |item| {
+        ("▲", item.word, palette.yellow)
+    });
+    let state = format!("{mark} {word}");
+    if columns(&facts.name) + 2 + columns(&state) <= LEFT {
+        lines.push(Line::new(
+            &format!("{}  {state}", facts.name),
+            format!(
+                "{}  {}",
+                paint.bold(&facts.name),
+                paint.color(color, &state)
+            ),
         ));
     } else {
-        row(text, paint, "VM", &facts.name, None);
-        row(text, paint, "", &system, Some(paint.palette().subtext));
+        for name in wrap(&facts.name, LEFT) {
+            lines.push(Line::new(&name, paint.bold(&name)));
+        }
+        lines.push(Line::colored(paint, color, &state));
     }
-}
+    extend(&mut lines, paint, palette.subtext, &facts.system, LEFT);
+    if attention.is_empty() {
+        extend(&mut lines, paint, palette.muted, &value, LEFT);
+    }
 
-/// Processors and memory; a part that cannot be read is left out.
-fn resources(facts: &Facts) -> String {
-    let mut parts = Vec::new();
-    match facts.cpus {
-        Some(1) => parts.push("1 CPU".to_owned()),
-        Some(count) => parts.push(format!("{count} CPUs")),
-        None => {}
+    if facts.cpus.is_some()
+        || facts.memory.is_some()
+        || facts.uptime.is_some()
+        || facts.disk.is_some()
+    {
+        group(&mut lines, paint, "SYSTEM");
+    }
+    if let Some(cpus) = facts.cpus {
+        detail(&mut lines, paint, "CPU", &cpus.to_string(), None);
     }
     if let Some(memory) = facts.memory {
-        parts.push(format!("{} memory", gibibytes(memory)));
+        detail(&mut lines, paint, "RAM", &gibibytes(memory), None);
     }
-    parts.join(", ")
+    if let Some(uptime) = facts.uptime {
+        detail(&mut lines, paint, "Uptime", &span(uptime), None);
+    }
+    if let Some(usage) = facts.disk {
+        let (free, total) = (gibibytes(usage.available_bytes), gibibytes(usage.bytes));
+        let free = free.strip_suffix(" GiB").unwrap_or(&free);
+        let color = (!disk_short(facts).is_empty()).then_some(palette.yellow);
+        detail(
+            &mut lines,
+            paint,
+            "Disk",
+            &format!("{free} / {total} free"),
+            color,
+        );
+    }
+    let network = network(facts);
+    if !network.is_empty() {
+        group(&mut lines, paint, "NETWORK");
+        for value in network {
+            extend(&mut lines, paint, palette.subtext, &value, LEFT);
+        }
+    }
+    shared(&mut lines, facts, paint);
+    lines
 }
 
-/// The free share of the guest disk as a bar, then in numbers.
-fn disk(text: &mut String, facts: &Facts, usage: DiskUsage, paint: Paint) {
-    let palette = paint.palette();
-    let (free, total) = (
-        u128::from(usage.available_bytes),
-        u128::from(usage.bytes.max(1)),
+/// A section heading with a blank line before it.
+fn group(lines: &mut Vec<Line>, paint: Paint, name: &str) {
+    lines.push(Line::blank());
+    lines.push(Line::colored(paint, paint.palette().blue, name));
+}
+
+/// Wrapped text measured before applying a color.
+fn extend(lines: &mut Vec<Line>, paint: Paint, color: Color, value: &str, width: usize) {
+    lines.extend(
+        wrap(value, width)
+            .iter()
+            .map(|line| Line::colored(paint, color, line)),
     );
-    let filled = usize::try_from((free * BAR as u128 + total / 2) / total)
-        .unwrap_or(BAR)
-        .min(BAR);
-    let percent = free * 100 / total;
-    let color = if percent < u128::from(facts.minimum_percent) {
-        palette.yellow
-    } else {
-        palette.green
-    };
-    let (free, total) = (gibibytes(usage.available_bytes), gibibytes(usage.bytes));
-    let free = free.strip_suffix(" GiB").unwrap_or(&free);
-    text.push_str(&format!(
-        "  {}{}{}  {percent}% free, {free} of {total}\n",
-        label(paint, "Disk"),
-        paint.color(color, &"█".repeat(filled)),
-        paint.color(palette.muted, &"░".repeat(BAR - filled)),
-    ));
 }
 
-/// The guest's addresses and the ports its firewall opens; `None` when neither is known.
-fn network(facts: &Facts) -> Option<String> {
-    let addresses = facts.addresses.as_ref().map(|addresses| {
+/// A labeled fact within the left column.
+fn detail(lines: &mut Vec<Line>, paint: Paint, name: &str, value: &str, color: Option<Color>) {
+    let mut name = name;
+    for value in wrap(value, LEFT - DETAIL) {
+        let plain = format!("{name:<DETAIL$}{value}");
+        let text = format!(
+            "{}{}",
+            paint.color(paint.palette().muted, &format!("{name:<DETAIL$}")),
+            color.map_or_else(|| value.clone(), |color| paint.color(color, &value))
+        );
+        lines.push(Line::new(&plain, text));
+        name = "";
+    }
+}
+
+/// The right column, capped by module count rather than wrapped line count.
+fn modules(facts: &Facts, paint: Paint) -> Vec<Line> {
+    let palette = paint.palette();
+    let total = facts
+        .modules
+        .as_ref()
+        .map_or(String::new(), |modules| format!(" {}", modules.len()));
+    let mut lines = vec![
+        Line::new(
+            &format!("MODULES{total}"),
+            format!(
+                "{}{}",
+                paint.color(palette.blue, "MODULES"),
+                paint.color(palette.muted, &total)
+            ),
+        ),
+        Line::blank(),
+    ];
+    match &facts.modules {
+        None => lines.push(Line::colored(paint, palette.subtext, "unknown")),
+        Some(modules) if modules.is_empty() => {
+            lines.push(Line::colored(paint, palette.subtext, "none"))
+        }
+        Some(modules) => {
+            for module in modules.iter().take(MODULE_LIMIT) {
+                for line in wrap(module, RIGHT) {
+                    lines.push(Line::new(&line, line.clone()));
+                }
+            }
+            if modules.len() > MODULE_LIMIT {
+                lines.push(Line::colored(paint, palette.muted, "..."));
+            }
+        }
+    }
+    lines
+}
+
+/// Guest addresses and firewall ports on separate lines; unreadable facts are omitted.
+fn network(facts: &Facts) -> Vec<String> {
+    let mut lines = Vec::new();
+    if let Some(addresses) = &facts.addresses {
         if addresses.is_empty() {
-            "no IPv4 address".to_owned()
+            lines.push("no IPv4 address".into());
         } else {
-            listing(addresses)
+            lines.extend(addresses.iter().cloned());
         }
-    });
-    let ports = facts.ports.as_ref().map(|ports| {
-        let groups: Vec<String> = [("tcp", &ports.tcp), ("udp", &ports.udp)]
-            .into_iter()
-            .filter(|(_, numbers)| !numbers.is_empty())
-            .map(|(protocol, numbers)| {
+    }
+    if let Some(ports) = &facts.ports {
+        if ports.tcp.is_empty() && ports.udp.is_empty() {
+            lines.push("no open ports".into());
+        }
+        for (protocol, numbers) in [("TCP", &ports.tcp), ("UDP", &ports.udp)] {
+            if !numbers.is_empty() {
                 let numbers: Vec<String> = numbers.iter().map(u16::to_string).collect();
-                format!("{protocol} {}", listing(&numbers))
-            })
-            .collect();
-        if groups.is_empty() {
-            "no open ports".to_owned()
-        } else {
-            format!("ports {}", groups.join(", "))
+                lines.push(format!("{protocol} {}", numbers.join(", ")));
+            }
         }
-    });
-    let parts: Vec<String> = [addresses, ports].into_iter().flatten().collect();
-    (!parts.is_empty()).then(|| parts.join(", "))
+    }
+    lines
 }
 
 /// Items as a phrase: `a`, `a and b`, `a, b and c`.
@@ -612,13 +671,20 @@ fn ago(age: Duration) -> String {
 }
 
 /// Shared folders with their mode, aligned after the longest target.
-fn shared(text: &mut String, facts: &Facts, paint: Paint) {
+fn shared(lines: &mut Vec<Line>, facts: &Facts, paint: Paint) {
+    group(lines, paint, "SHARED");
     let Some(mounts) = &facts.mounts else {
-        row(text, paint, "Shared", "unavailable; run lmx info", None);
+        extend(
+            lines,
+            paint,
+            paint.palette().subtext,
+            "unavailable; run lmx info",
+            LEFT,
+        );
         return;
     };
     if mounts.is_empty() {
-        row(text, paint, "Shared", "(none)", None);
+        lines.push(Line::colored(paint, paint.palette().subtext, "none"));
         return;
     }
     let width = mounts
@@ -626,8 +692,7 @@ fn shared(text: &mut String, facts: &Facts, paint: Paint) {
         .map(|mount| columns(&mount.target))
         .max()
         .unwrap_or_default()
-        .min(TARGET);
-    let mut name = "Shared";
+        .min(LEFT - 4);
     for mount in mounts {
         let (mode, color) = if mount.read_only {
             ("ro", paint.palette().peach)
@@ -637,15 +702,13 @@ fn shared(text: &mut String, facts: &Facts, paint: Paint) {
         for (index, line) in wrap(&mount.target, width).into_iter().enumerate() {
             if index == 0 {
                 let padding = width.saturating_sub(columns(&line));
-                text.push_str(&format!(
-                    "  {}{line}{:padding$}  {}\n",
-                    label(paint, name),
-                    "",
-                    paint.color(color, mode)
+                let plain = format!("{line}{:padding$}  {mode}", "");
+                lines.push(Line::new(
+                    &plain,
+                    format!("{line}{:padding$}  {}", "", paint.color(color, mode)),
                 ));
-                name = "";
             } else {
-                text.push_str(&format!("  {:LABEL$}{line}\n", ""));
+                lines.push(Line::new(&line, line.clone()));
             }
         }
     }
@@ -701,7 +764,7 @@ mod tests {
         Facts {
             name: "dev-box".into(),
             system: "NixOS 26.05, arm64".into(),
-            modules: "go, docker, python-3.12".into(),
+            modules: Some(vec!["go".into(), "docker".into(), "python-3.12".into()]),
             minimum_percent: 10,
             generation: Some("0123456789ab".into()),
             built: Some("0123456789ab".into()),
@@ -735,39 +798,53 @@ mod tests {
             ]),
             failed_units: vec![],
             owner: Some(owner(&[CONVERGED], false)),
-            tip: Some((
-                "lmx help go".into(),
-                " shows what the go module gives you.".into(),
-            )),
         }
-    }
-
-    fn body(text: &str) -> &str {
-        let logo_end = text.find(LOGO[7]).expect("logo") + LOGO[7].len() + 1;
-        &text[logo_end..]
     }
 
     #[test]
     fn shows_a_healthy_vm() {
         let text = render(&facts(), Paint::plain());
-        assert!(text.starts_with("\n  888      d8b"));
-        assert_eq!(
-            body(&text),
-            "\n  ● ready    generation 0123456, updated 2 days ago\n\
-             \n  VM         dev-box (NixOS 26.05, arm64), up 3 h\
-             \n  Resources  4 CPUs, 7.6 GiB memory\
-             \n  Disk       ████████████░░░░░░░░  60% free, 39 of 64 GiB\
-             \n  Network    192.168.105.4, ports tcp 8080 and 5432\
-             \n  Modules    go, docker, python-3.12\
-             \n  Shared     /home/dev     rw\
-             \n             /mnt/limanix  ro\n\
-             \n  tip  lmx help go shows what the go module gives you.\
-             \n  lmx help for commands, lmx status for details, exit to return to the Mac.\n\n"
-        );
+        assert!(text.starts_with("\n  ╲ ╲  ╱ ╱  LimaNix"));
+        for value in [
+            "https://github.com/limanix",
+            "https://limanix.dev",
+            "dev-box  ● ready",
+            "NixOS 26.05, arm64",
+            "generation 0123456, updated 2 days ago",
+            "CPU     4",
+            "RAM     7.6 GiB",
+            "Uptime  3 h",
+            "Disk    39 / 64 GiB free",
+            "192.168.105.4",
+            "TCP 8080, 5432",
+            "/home/dev     rw",
+            "/mnt/limanix  ro",
+            "MODULES 3",
+        ] {
+            assert!(text.contains(value), "{value}: {text}");
+        }
+        for name in ["go", "docker", "python-3.12"] {
+            let line = text
+                .lines()
+                .find(|line| line.ends_with(name))
+                .expect("module row");
+            assert_eq!(columns(&line[..line.len() - name.len()]), 48, "{line}");
+        }
+        let footer = text.split(&"─".repeat(WIDTH)).nth(1).expect("separator");
+        for command in [
+            "lmx help",
+            "nix profile add nixpkgs#ripgrep",
+            "nix profile remove ripgrep",
+        ] {
+            assert!(footer.contains(command), "{footer}");
+        }
+        assert!(!footer.contains("lmx status"));
+        assert!(!footer.contains("lmx doctor"));
+        assert!(!text.contains("  tip  "));
     }
 
     #[test]
-    fn lists_what_needs_attention_in_place_of_the_tip() {
+    fn keeps_actionable_warnings_below_the_columns() {
         let mut facts = facts();
         facts.owner = Some(owner(&[RESTART_REQUIRED, DEGRADED], false));
         facts.built = Some("4a1f9c2d0e11".into());
@@ -777,7 +854,10 @@ mod tests {
         });
         facts.failed_units = vec!["postgresql.service".into()];
         let text = render(&facts, Paint::plain());
-        let state: Vec<&str> = body(&text).lines().skip(1).take(4).collect();
+        let state: Vec<&str> = text
+            .lines()
+            .filter(|line| line.starts_with("  ▲ "))
+            .collect();
         assert_eq!(
             state,
             [
@@ -809,15 +889,12 @@ mod tests {
     fn shows_an_update_in_progress() {
         let mut facts = facts();
         facts.owner = Some(owner(&[OUT_OF_DATE], true));
-        assert!(
-            render(&facts, Paint::plain())
-                .contains("\n  ● applying a new generation is being built\n")
-        );
+        assert!(render(&facts, Paint::plain()).contains("dev-box  ● applying"));
+        assert!(render(&facts, Paint::plain()).contains("a new generation is being built"));
+        assert!(!render(&facts, Paint::plain()).contains("run limanix update"));
         facts.owner = Some(owner(&[], false));
-        assert!(
-            render(&facts, Paint::plain())
-                .contains("\n  ● checking generation 0123456 is being checked\n")
-        );
+        assert!(render(&facts, Paint::plain()).contains("dev-box  ● checking"));
+        assert!(render(&facts, Paint::plain()).contains("generation 0123456 is being checked"));
     }
 
     #[test]
@@ -829,18 +906,20 @@ mod tests {
             udp: vec![53],
         });
         assert_eq!(
-            network(&facts).as_deref(),
-            Some("192.168.5.15 and 192.168.105.4, ports tcp 22, 8080 and 5432, udp 53")
+            network(&facts),
+            [
+                "192.168.5.15",
+                "192.168.105.4",
+                "TCP 22, 8080, 5432",
+                "UDP 53"
+            ]
         );
         facts.addresses = Some(vec![]);
         facts.ports = Some(Ports::default());
-        assert_eq!(
-            network(&facts).as_deref(),
-            Some("no IPv4 address, no open ports")
-        );
+        assert_eq!(network(&facts), ["no IPv4 address", "no open ports"]);
         facts.addresses = None;
         facts.ports = None;
-        assert_eq!(network(&facts), None);
+        assert!(network(&facts).is_empty());
     }
 
     #[test]
@@ -864,11 +943,9 @@ mod tests {
     fn explains_missing_shared_folders() {
         let mut facts = facts();
         facts.mounts = Some(vec![]);
-        assert!(render(&facts, Paint::plain()).contains("  Shared     (none)\n"));
+        assert!(render(&facts, Paint::plain()).contains("  SHARED\n  none\n"));
         facts.mounts = None;
-        assert!(
-            render(&facts, Paint::plain()).contains("  Shared     unavailable; run lmx info\n")
-        );
+        assert!(render(&facts, Paint::plain()).contains("  SHARED\n  unavailable; run lmx info\n"));
     }
 
     #[test]
@@ -882,18 +959,19 @@ mod tests {
         facts.addresses = None;
         facts.ports = None;
         let text = render(&facts, Paint::plain());
-        for missing in ["Resources", "Disk", "Network", "up ", "updated"] {
+        for missing in ["SYSTEM", "Disk", "NETWORK", "Uptime", "updated"] {
             assert!(!text.contains(missing), "{missing}: {text}");
         }
-        assert!(text.contains("  ● ready    generation 0123456\n"));
-        assert!(text.contains("  VM         dev-box (NixOS 26.05, arm64)\n"));
+        assert!(text.contains("dev-box  ● ready"));
+        assert!(text.contains("generation 0123456"));
+        assert!(text.contains("NixOS 26.05, arm64"));
     }
 
     #[test]
     fn wraps_long_values_within_eighty_columns() {
         let mut facts = facts();
         facts.name = "long-vm-name-".repeat(10);
-        facts.modules = format!("{}git", "console, ".repeat(12));
+        facts.modules = Some(vec!["界".repeat(50); 21]);
         facts.mounts = Some(vec![
             Mount {
                 target: format!("/workspace/{}", "project-".repeat(16)),
@@ -928,11 +1006,50 @@ mod tests {
     }
 
     #[test]
-    fn every_tip_fits_on_one_line() {
-        for (command, text) in TIPS {
-            let line = format!("  tip  {command}{text}");
-            assert!(columns(&line) <= 80, "{line}");
+    fn caps_the_module_count_and_only_then_adds_an_ellipsis() {
+        let mut facts = facts();
+        for count in [0, 20, 21] {
+            facts.modules = Some((1..=count).map(|n| format!("module-{n:02}")).collect());
+            let text = render(&facts, Paint::plain());
+            assert_eq!(text.matches("module-").count(), count.min(20), "{text}");
+            assert_eq!(text.contains("..."), count > 20, "{text}");
+            assert_eq!(text.contains("module-20"), count >= 20, "{text}");
+            assert!(!text.contains("module-21"), "{text}");
+            assert!(text.contains(&format!("MODULES {count}")));
+            if count == 0 {
+                assert!(text.contains("none"));
+            }
         }
+        facts.modules = None;
+        let text = render(&facts, Paint::plain());
+        assert!(text.contains("unknown"));
+        assert!(!text.contains("MODULES 0"));
+    }
+
+    #[test]
+    fn keeps_module_order_and_only_strips_the_lmx_prefix() {
+        assert_eq!(
+            selected(&[
+                "lmx:go".into(),
+                "third-party:custom".into(),
+                "lmx:docker".into()
+            ]),
+            ["go", "third-party:custom", "docker"]
+        );
+    }
+
+    #[test]
+    fn counts_long_module_names_once_even_when_they_wrap() {
+        let mut facts = facts();
+        facts.modules = Some(
+            (1..=21)
+                .map(|n| format!("{}-{n:02}", "界".repeat(40)))
+                .collect(),
+        );
+        let text = render(&facts, Paint::plain());
+        assert!(text.contains("-20"));
+        assert!(!text.contains("-21"));
+        assert!(text.contains("..."));
     }
 
     #[test]
@@ -952,5 +1069,23 @@ mod tests {
         let text = render(&facts(), Paint::colored());
         assert!(text.contains("\x1b[1mdev-box\x1b[0m"));
         assert!(text.contains("\x1b[38;2;250;179;135mro\x1b[0m"));
+        let mut plain = String::new();
+        let mut chars = text.chars();
+        while let Some(character) = chars.next() {
+            if character == '\x1b' {
+                for character in chars.by_ref() {
+                    if character == 'm' {
+                        break;
+                    }
+                }
+            } else {
+                plain.push(character);
+            }
+        }
+        assert_eq!(
+            plain,
+            render(&facts(), Paint::plain()),
+            "color must not shift columns"
+        );
     }
 }

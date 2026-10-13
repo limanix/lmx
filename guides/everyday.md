@@ -6,26 +6,44 @@ These commands work in any guest shell. None of them needs `sudo`, although
 ## Where am I?
 
 `lmx help` shows the VM, your account, the selected modules, and the commands
-inside the VM and on the Mac. `lmx welcome` shows the summary that greets you
-under the LimaNix logo when a shell starts:
+inside the VM and on the Mac. `lmx welcome` greets you with the LimaNix mark,
+project links, guest details on the left and selected modules on the right:
 
 ```console
 $ lmx welcome
-  ● ready    generation 0123456, updated 2 days ago
+  ╲ ╲  ╱ ╱  LimaNix                             MODULES 3
+   ╲ ╲╱ ╱   https://github.com/limanix
+   ╱ ╱╲ ╲   https://limanix.dev                 go
+  ╱ ╱  ╲ ╲                                      docker
+                                                python-3.12
+  dev-box  ● ready
+  NixOS 26.05, arm64
+  generation 0123456, updated 2 days ago
 
-  VM         dev-box (NixOS 26.05, arm64), up 3 h
-  Resources  4 CPUs, 7.6 GiB memory
-  Disk       ████████████░░░░░░░░  60% free, 39 of 64 GiB
-  Network    192.168.105.4, ports tcp 8080 and 5432
-  Modules    go, docker, python-3.12
-  Shared     /home/dev  rw
+  SYSTEM
+  CPU     4
+  RAM     7.6 GiB
+  Uptime  3 h
+  Disk    39 / 64 GiB free
 
-  tip  lmx help go shows what the go module gives you.
-  lmx help for commands, lmx status for details, exit to return to the Mac.
+  NETWORK
+  192.168.105.4
+  TCP 8080, 5432
+
+  SHARED
+  /home/dev     rw
+  /mnt/limanix  ro
+
+  ──────────────────────────────────────────────────────────────────────────────
+
+  lmx help                             Explore commands
+  nix profile add nixpkgs#ripgrep      Install a package
+  nix profile remove ripgrep           Remove a package
 ```
 
-When something needs you, the first line becomes one line per problem, each with
-the command that helps, and the tip goes away:
+The module column shows at most 20 names, followed by `...` when more are
+selected. When something needs attention, the status beside the VM name changes
+and the warnings appear below the columns, each with the command that helps:
 
 ```console
   ▲ failed   postgresql.service; run systemctl status postgresql.service
@@ -58,12 +76,45 @@ on your `PATH`. `lmx help` lists the topics, `lmx help python-3.12` and
 `lmx help lmx:python-3.12` work too, and the guide opens the module's full page.
 Your own modules can add a card with the NixOS option `limanix.help.<topic>`.
 
+## Install a package for yourself
+
+When no module gives you a tool, take it straight from Nixpkgs. Try it first
+without installing anything:
+
+```console
+$ nix shell nixpkgs#openssl --command openssl version
+OpenSSL 3.6.4 25 Aug 2026 (Library: OpenSSL 3.6.4 25 Aug 2026)
+```
+
+`nix shell nixpkgs#openssl` without `--command` opens a shell with the tool on
+your `PATH`; `exit` drops it again. To keep a tool, add it to your profile:
+
+| Task | Command |
+| -- | -- |
+| Install | `nix profile add nixpkgs#openssl` |
+| List what you installed | `nix profile list` |
+| Remove | `nix profile remove openssl` |
+| Free the disk space of removed tools | `nix profile wipe-history` |
+
+None of these needs `sudo`. `nixpkgs` here is the VM's own NixOS release: the
+same package set the system and the modules use. A tool you add shares their
+libraries, and nothing is downloaded twice. Find a package name on
+[search.nixos.org](https://search.nixos.org/packages) with the channel that
+`nixos-version` shows, such as 26.05.
+
+> [!NOTE]
+>
+> Your profile belongs to this VM. A tool every VM of yours should have belongs
+> in a module of your `limanix.toml`. Older versions of your profile keep
+> removed tools on disk until `nix profile wipe-history`; `lmx` never deletes
+> them, see [Disk and the Nix store](disk.md).
+
 ## How is the guest doing?
 
 ```console
 $ lmx status
 Generation    desired 0123456789ab, built 0123456789ab, booted 0123456789ab
-Disk          8.0 GiB of 16 GiB free, 495616 of 1048576 inodes free
+Disk          8.0 GiB of 16 GiB free
 Network       enp0s1 192.0.2.10
 Failed units  none
 Owner         lmxd 0.1.0, idle
@@ -72,7 +123,7 @@ Owner         lmxd 0.1.0, idle
 | Line | Tells you |
 | -- | -- |
 | Generation | Which configuration the Mac handed over (`desired`), which one is built for the next boot (`built`), and which one runs now (`booted`). When all three match, the VM runs what you asked for. |
-| Disk | Free space and free inodes on the disk that holds the Nix store. Either one can run out first. |
+| Disk | Free space on the disk that holds the Nix store. On a file system with an inode table, free inodes too. |
 | Network | The guest's addresses, the ones the Mac connects to. |
 | Failed units | systemd services that failed. |
 | Owner | The `lmxd` version and what it is doing right now, such as `StoreCollect running`. |

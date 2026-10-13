@@ -16,28 +16,29 @@ use crate::{
     welcome::{label, row},
 };
 
-/// Commands people use inside the VM, after `lmx help TOPIC`.
-const INSIDE: [(&str, &str); 9] = [
+/// Commands for use inside the VM, after `lmx help TOPIC`.
+const INSIDE: [(&str, &str); 10] = [
     (
         "lmx info",
-        "Show the kernel, guest disk, shared folders and failed units.",
+        "Show the kernel, disk, shared folders, failed units.",
     ),
     (
         "lmx status",
-        "Show generations, disk, network, failed units; sudo shows every fact.",
+        "Show generations, disk and network; sudo shows more.",
     ),
-    (
-        "lmx doctor",
-        "Find what is wrong with the guest owner and what to do about it.",
-    ),
+    ("lmx doctor", "Find what is wrong and what to do about it."),
     (
         "lmx net check PORT",
         "Check why a port may be unreachable from the Mac.",
     ),
     ("lmx welcome", "Show the workspace welcome again."),
     (
+        "nix shell nixpkgs#PKG",
+        "Run a tool no module gives; nix profile add keeps it.",
+    ),
+    (
         "limanix-session NAME",
-        "Open a named session with the selected session provider.",
+        "Open a named session with the session provider.",
     ),
     (
         "pbcopy < FILE",
@@ -56,7 +57,7 @@ On the Mac
   limanix list                          Show VM state and network addresses.
   limanix shell NAME                    Open the guest user's login shell.
   limanix shell NAME --session PROJECT  Open a named project session.
-  limanix update --config FILE          Apply resources, modules and environment.
+  limanix update --config FILE          Apply resources, modules, environment.
   limanix stop NAME                     Stop the VM; keep its disk and home.
 
 Tools come from the modules selected in your TOML configuration.
@@ -65,9 +66,9 @@ Guide: https://limanix.dev/categories/client/getting-started.html
 ";
 
 /// Columns of a command in the list inside the VM, after the two-column indent.
-const COMMAND: usize = 22;
+const COMMAND: usize = 24;
 /// Columns left for the description of a command: 80 minus the indent and the command.
-const DESCRIPTION: usize = 56;
+const DESCRIPTION: usize = 54;
 /// Columns of the title and the summary of a card, after the two-column indent.
 const CARD: usize = 78;
 
@@ -91,7 +92,7 @@ fn page(config: &Result<Config, String>, help: &Result<Help, String>) -> (String
     page.push_str("\nInside this VM\n");
     page.push_str(&topics(help));
     for (command, description) in INSIDE {
-        page.push_str(&format!("  {command:<COMMAND$}{description}\n"));
+        page.push_str(&entry(command, description));
     }
     page.push('\n');
     page.push_str(MAC);
@@ -114,9 +115,14 @@ fn topics(help: &Result<Help, String>) -> String {
         ),
         Err(message) => format!("Module help cannot be read: {message}"),
     };
-    let mut command = "lmx help TOPIC";
+    entry("lmx help TOPIC", &description)
+}
+
+/// One command of the list and its description, which wraps in its own column.
+fn entry(command: &str, description: &str) -> String {
+    let mut command = command;
     let mut text = String::new();
-    for line in wrap(&description, DESCRIPTION) {
+    for line in wrap(description, DESCRIPTION) {
         text.push_str(&format!("  {command:<COMMAND$}{line}\n"));
         command = "";
     }
@@ -302,12 +308,25 @@ mod tests {
             "lmx net check PORT",
             "lmx welcome",
             "limanix-session NAME",
+            "nix shell nixpkgs#PKG",
             "pbcopy",
             "pbpaste",
             "limanix shell NAME",
             "limanix update --config FILE",
         ] {
             assert!(page.contains(command), "missing {command}");
+        }
+    }
+
+    #[test]
+    fn the_page_fits_in_eighty_columns() {
+        let (page, _) = page(&Ok(config()), &Ok(help()));
+        for line in page.lines() {
+            assert!(
+                crate::layout::columns(line) <= 80,
+                "{} columns: {line:?}",
+                crate::layout::columns(line)
+            );
         }
     }
 
@@ -332,7 +351,7 @@ mod tests {
     fn lists_the_topics_with_a_card_first_inside_the_vm() {
         let (page, _) = page(&Ok(config()), &Ok(help()));
         assert!(
-            page.contains("Inside this VM\n  lmx help TOPIC        Show what a module gives you: python.\n  lmx info "),
+            page.contains("Inside this VM\n  lmx help TOPIC          Show what a module gives you: python.\n  lmx info "),
             "{page}"
         );
     }
@@ -342,7 +361,7 @@ mod tests {
         let (page, readable) = page(&Ok(config()), &Err("cannot read /etc/lmx/help.json".into()));
         assert!(!readable);
         assert!(
-            page.contains("lmx help TOPIC        Module help cannot be read: cannot read"),
+            page.contains("lmx help TOPIC          Module help cannot be read: cannot read"),
             "{page}"
         );
         assert!(page.contains("lmx info"));

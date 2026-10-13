@@ -23,6 +23,7 @@ flowchart LR
 | -- | -- |
 | See what this VM is and which commands exist | `lmx help` |
 | See what a module gave me: commands, tips, guide | `lmx help python` |
+| Use a tool that no module gives me | `nix shell nixpkgs#openssl` |
 | Check disk space, generations and failed services | `lmx status` |
 | Find out what is wrong and what to do | `lmx doctor` |
 | Learn why the Mac cannot reach my service on a port | `lmx net check 8080` |
@@ -39,7 +40,7 @@ flowchart LR
 
 | Page | Read it to |
 | -- | -- |
-| [Everyday commands](everyday.md) | Use status, the clipboard, sessions and the welcome |
+| [Everyday commands](everyday.md) | Use status, the clipboard, sessions, packages and the welcome |
 | [How an update works](updates.md) | Follow `limanix update` from the Mac into the guest and back |
 | [Disk and the Nix store](disk.md) | Understand what `lmx` cleans up, and what it never touches |
 | [When something is wrong](troubleshooting.md) | Go from a symptom to the command that explains it |

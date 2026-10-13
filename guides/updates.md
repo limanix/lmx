@@ -112,7 +112,7 @@ update ends with status 130.
 | What you see | What it means | Where to look |
 | -- | -- | -- |
 | The build fails | `nixos-rebuild` could not build generation G. The VM is not restarted and keeps the old generation. | The error on the Mac, then `sudo lmx logs apply` |
-| The disk is full during the build | The store ran out of space or inodes. | [Disk and the Nix store](disk.md) |
+| The disk is full during the build | The store ran out of space. | [Disk and the Nix store](disk.md) |
 | `Degraded` after the restart | G runs, but a service, mount or the login shell failed its check. | `lmx doctor`, then `sudo lmx logs health` |
 | "ready, but lmx reported: Finalizing … failed" | G works. Only the cleanup failed, and `lmxd` retries it. | `sudo lmx logs finalize` |
 

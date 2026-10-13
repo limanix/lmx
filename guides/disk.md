@@ -11,9 +11,9 @@ and their dependencies. `lmx` cleans that up for you, carefully.
 | Less than **20%** | `lmxd` removes store paths that nothing uses any more. |
 | Less than **10%** | It also lists what still holds space, and `lmx status` warns with `disk-low`. |
 
-"Free" means free bytes *and* free inodes. The guest disk is ext4, which fixes
-its number of inodes when the disk is made; a store full of small files can run
-out of inodes with gigabytes still free.
+"Free" means free bytes. The guest's root is btrfs, which has no fixed inode
+table: a store full of small files cannot run out of inodes. On a file system
+with an inode table, free inodes count too.
 
 ## How the guard decides
 
@@ -62,13 +62,11 @@ smaller module selection may still fit.
 1. Run `sudo lmx logs roots` and remove the roots you do not need.
 1. Run `sudo lmx store reserve` again.
 1. If it is still not enough, give the VM a bigger disk: raise `resources.disk`
-   in `limanix.toml` and run `limanix update`. A bigger disk brings more inodes
-   too.
+   in `limanix.toml` and run `limanix update`.
 
 </details>
 
 > [!NOTE]
 >
 > Builds have their own safety net. Nix frees space by itself when free bytes
-> drop too low in the middle of a build; `lmxd` covers inodes and the time
-> between builds.
+> drop too low in the middle of a build; `lmxd` covers the time between builds.

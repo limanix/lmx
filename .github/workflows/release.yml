@@ -15,14 +15,13 @@ jobs:
   check:
     name: Check ${{ github.ref_name }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Check that the tag is on main
-        uses: mr-chelyshkin/actions/check-tag-branch@v1
+        uses: mr-chelyshkin/actions/tag-branch-check@v2
         with:
           branch: main
       - name: Check that the tag matches the workspace version
@@ -40,7 +39,6 @@ jobs:
     name: Build (${{ matrix.arch }})
     needs: check
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
     strategy:
       matrix:
         arch: [aarch64, x86_64]
@@ -49,9 +47,10 @@ jobs:
         with:
           persist-credentials: false
       - name: Build the release archive
-        uses: mr-chelyshkin/actions/invoke-taskfile@v1
+        uses: mr-chelyshkin/actions/task-run@v2
         with:
-          command: release/build ARCH=${{ matrix.arch }}
+          task: release/build
+          args: ARCH=${{ matrix.arch }}
       - name: Keep the release archive
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -63,15 +62,15 @@ jobs:
     name: Prepare docs
     needs: check
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Prepare the pages for the LimaNix site
-        uses: mr-chelyshkin/actions/invoke-taskfile@v1
+        uses: mr-chelyshkin/actions/task-run@v2
         with:
-          command: docs/prepare LMX_REF=${{ github.ref_name }}
+          task: docs/prepare
+          args: LMX_REF=${{ github.ref_name }}
       - name: Package docs
         run: tar -czf build/docs.tar.gz -C build/docs .
       - name: Keep the docs archive
@@ -85,7 +84,6 @@ jobs:
     name: Publish ${{ github.ref_name }}
     needs: [build, docs]
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
     permissions:
       contents: write
     steps:
