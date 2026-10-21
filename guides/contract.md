@@ -240,6 +240,7 @@ fail the command.
 | `owner` | Whether `lmxd` answers, and whether its version is the version of `lmx` |
 | `generations` | The generation conditions of `lmxd`, such as `RestartRequired`, or what the markers say without `lmxd` |
 | `disk` | `DiskLow`, when `lmxd` reports it |
+| `dotfiles` | Only when `limanix.toml` names dotfiles: whether their entries are linked into the home of the development account. A `warning` names the paths in the way; `failed` means the directory is not mounted or cannot be read |
 
 Example: [doctor](../contract/v1/doctor.json).
 

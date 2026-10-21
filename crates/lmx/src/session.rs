@@ -41,12 +41,12 @@ pub(crate) fn run(config: &Result<Config, String>, name: &OsStr) -> ExitCode {
     process::replace(Command::new(provider).arg(name))
 }
 
-/// Explains how to select a provider when none is configured.
+/// Explains how to choose a provider when none is configured.
 fn missing_provider(providers: &[String]) -> String {
     let mut text = String::from("No session provider is configured in this VM.\n");
     if !providers.is_empty() {
         text.push_str(&format!(
-            "Select a session provider in nixos.modules: {}\n",
+            "Choose a session provider in limanix.toml: {}\n",
             providers.join(", ")
         ));
         text.push_str(
@@ -62,9 +62,14 @@ mod tests {
 
     #[test]
     fn suggests_providers_from_the_catalog() {
-        let text = missing_provider(&["lmx:tmux".into(), "third-party:sessions".into()]);
+        let text = missing_provider(&[
+            r#"[shell] multiplexer = "tmux""#.into(),
+            "third-party:sessions".into(),
+        ]);
         assert!(text.starts_with("No session provider is configured in this VM.\n"));
-        assert!(text.contains("nixos.modules: lmx:tmux, third-party:sessions\n"));
+        assert!(
+            text.contains("limanix.toml: [shell] multiplexer = \"tmux\", third-party:sessions\n")
+        );
         assert!(text.contains("limanix update"));
     }
 

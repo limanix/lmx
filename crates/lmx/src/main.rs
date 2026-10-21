@@ -21,13 +21,17 @@
 //! | `lmx clipboard copy`  | caller | copies standard input to the Mac clipboard                  |
 //! | `lmx clipboard paste` | caller | prints the Mac clipboard, if the terminal allows reads      |
 //! | `lmx session NAME`    | caller | opens a named session with the selected provider            |
+//! | `lmx dotfiles`        | facts  | which dotfiles from the Mac are linked into the home        |
+//! | `lmx dotfiles link`   | caller | links the dotfiles from the Mac into the home               |
 //!
 //! Facts are read in the caller's process with the caller's privileges and need no daemon. Owner
 //! operations run only in the guest owner daemon `lmxd`; without it they fail with exit status 3.
 //! `lmx status --wait converged -g G` is one too: it answers once `lmxd` reports generation G
 //! settled after a restart. `lmx status --short` prints only what needs attention, for tmux and the
 //! prompt, and never waits more than 200 ms. Caller commands act on the caller's terminal and
-//! environment, and only the caller can run them.
+//! environment, and only the caller can run them. `lmx dotfiles link` runs only as the development
+//! account, never as root: the links in its home must belong to it. Every interactive shell of the
+//! account runs it with `--quiet` before it reads `~/.zshrc` or `~/.bashrc`.
 //!
 //! ## Other names
 //!
@@ -58,6 +62,7 @@ mod apply;
 mod cli;
 mod clipboard;
 mod doctor;
+mod dotfiles;
 mod findings;
 mod format;
 mod help;
@@ -89,7 +94,10 @@ use clap::Parser;
 use lmx_model::Protocol;
 
 use crate::{
-    cli::{ApplyArgs, ApplyCommand, Cli, ClipboardCommand, Command, NetCommand, StoreCommand},
+    cli::{
+        ApplyArgs, ApplyCommand, Cli, ClipboardCommand, Command, DotfilesArgs, DotfilesCommand,
+        NetCommand, StoreCommand,
+    },
     system::System,
 };
 
@@ -172,5 +180,9 @@ fn lmx(mut arguments: Vec<OsString>) -> io::Result<ExitCode> {
         Some(Command::Session(args)) => {
             Ok(session::run(&System::from_environment().config, &args.name))
         }
+        Some(Command::Dotfiles(DotfilesArgs {
+            command: Some(DotfilesCommand::Link(args)),
+        })) => dotfiles::link(&System::from_environment(), args.quiet),
+        Some(Command::Dotfiles(_)) => dotfiles::status(&System::from_environment()),
     }
 }

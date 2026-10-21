@@ -3,7 +3,7 @@
 use std::{
     fs,
     io::{self, Write},
-    os::unix::fs::{PermissionsExt, symlink},
+    os::unix::fs::{MetadataExt, PermissionsExt, symlink},
     path::{Path, PathBuf},
     process::{self, Command, Output, Stdio},
     sync::OnceLock,
@@ -183,10 +183,14 @@ impl Guest {
     }
 
     fn set_session(&self, session: Value) {
+        self.configure(|config| config["session"] = session);
+    }
+
+    fn configure(&self, change: impl FnOnce(&mut Value)) {
         let mut config: Value =
             serde_json::from_slice(&fs::read(self.config()).expect("read configuration"))
                 .expect("configuration JSON");
-        config["session"] = session;
+        change(&mut config);
         self.write("etc/lmx/config.json", &config.to_string());
     }
 
@@ -238,6 +242,44 @@ fn answer(output: &Output) -> Value {
         .expect("the answer ends with a newline");
     assert!(!line.contains(&b'\n'), "the answer is a single line");
     serde_json::from_slice(line).expect("standard output is one JSON answer")
+}
+
+fn dotfiles_guest() -> (Guest, u32) {
+    let guest = Guest::new();
+    let uid = fs::metadata(guest.root.path())
+        .expect("tree metadata")
+        .uid();
+    guest.configure(|config| {
+        config["dotfiles"] = json!(guest.path("mnt/dotfiles"));
+        config["user"]["home"] = json!(guest.path("home/dev"));
+        config["user"]["uid"] = json!(uid);
+    });
+    guest.write(
+        "proc/self/mountinfo",
+        &format!(
+            "{MOUNTINFO}42 22 0:40 / {} rw,relatime shared:22 - virtiofs mount2 rw\n",
+            guest.path("mnt/dotfiles").display()
+        ),
+    );
+    for (name, content) in [
+        (".zshrc", "zsh"),
+        (".tmux.conf", "tmux"),
+        (".gitconfig", "git"),
+        (".git/HEAD", "ref: refs/heads/main"),
+        (".DS_Store", ""),
+        ("README.md", "my dotfiles"),
+        (".config/nvim/init.lua", "-- nvim"),
+        (".config/starship.toml", "# starship"),
+    ] {
+        guest.write(&format!("mnt/dotfiles/{name}"), content);
+    }
+    guest.write("home/dev/.gitconfig", "guest");
+    symlink(
+        guest.path("mnt/dotfiles/.vimrc"),
+        guest.path("home/dev/.vimrc"),
+    )
+    .expect("link an entry that is gone");
+    (guest, uid)
 }
 
 fn fake_tmux(guest: &Guest, answers: bool) -> PathBuf {
@@ -309,7 +351,6 @@ fn status_json_answers_the_host_contract() {
         json!([{"name": "enp0s1", "mac": "52:55:55:aa:bb:cc", "ipv4": ["192.0.2.10"]}])
     );
     assert_eq!(data["failed_units"], json!(["limanix-store-guard.service"]));
-    // No lmxd runs in this guest: the owner is the only fact that cannot be read.
     assert_eq!(data["owner"], Value::Null);
     assert_eq!(data["problems"].as_array().map(Vec::len), Some(1), "{data}");
     assert_eq!(data["problems"][0]["fact"], "owner");
@@ -642,7 +683,9 @@ fn session_passes_one_name_to_the_provider_unchanged() {
 fn session_without_a_provider_suggests_one() {
     let guest = Guest::new();
     for command in [Value::Null, json!("")] {
-        guest.set_session(json!({"command": command, "providers": ["lmx:tmux"]}));
+        guest.set_session(
+            json!({"command": command, "providers": [r#"[shell] multiplexer = "tmux""#]}),
+        );
         let output = guest
             .alias("limanix-session", &["demo"])
             .output()
@@ -651,7 +694,7 @@ fn session_without_a_provider_suggests_one() {
         assert_eq!(
             String::from_utf8_lossy(&output.stderr),
             "No session provider is configured in this VM.\n\
-             Select a session provider in nixos.modules: lmx:tmux\n\
+             Choose a session provider in limanix.toml: [shell] multiplexer = \"tmux\"\n\
              Apply the configuration with limanix update --config <file> before reconnecting.\n"
         );
     }
@@ -870,6 +913,7 @@ fn a_closed_standard_output_ends_quietly() {
         &["version"],
         &["info"],
         &["welcome"],
+        &["dotfiles"],
         &[],
     ] {
         let (reader, writer) = io::pipe().expect("pipe");
@@ -978,5 +1022,260 @@ fn logs_show_the_latest_run_of_a_kind() {
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("run sudo lmx logs health"),
         "{output:?}"
+    );
+}
+
+#[test]
+fn dotfiles_link_links_the_entries_into_the_home() {
+    let (guest, _) = dotfiles_guest();
+    let output = guest.lmx(&["dotfiles", "link"], &guest.config());
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "linked    ~/.tmux.conf\n\
+         linked    ~/.zshrc\n\
+         linked    ~/.config/nvim\n\
+         linked    ~/.config/starship.toml\n\
+         removed   ~/.vimrc\n\
+         conflict  ~/.gitconfig is a file\n"
+    );
+    assert!(output.stderr.is_empty(), "{output:?}");
+
+    let home = guest.path("home/dev");
+    for name in [
+        ".tmux.conf",
+        ".zshrc",
+        ".config/nvim",
+        ".config/starship.toml",
+    ] {
+        assert_eq!(
+            fs::read_link(home.join(name)).expect("a link"),
+            guest.path("mnt/dotfiles").join(name),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(home.join(".config/nvim/init.lua")).expect("read through the link"),
+        "-- nvim"
+    );
+    assert!(
+        fs::symlink_metadata(home.join(".config"))
+            .expect("~/.config")
+            .is_dir()
+    );
+    assert_eq!(
+        fs::read_to_string(home.join(".gitconfig")).expect("the guest's own file"),
+        "guest"
+    );
+    for name in [".vimrc", ".git", ".DS_Store", "README.md"] {
+        assert!(fs::symlink_metadata(home.join(name)).is_err(), "{name}");
+    }
+
+    let output = guest.lmx(&["dotfiles", "link", "--quiet"], &guest.config());
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        output.stdout.is_empty() && output.stderr.is_empty(),
+        "{output:?}"
+    );
+}
+
+#[test]
+fn dotfiles_show_the_links_without_changing_them() {
+    let (guest, _) = dotfiles_guest();
+    let home = guest.path("home/dev");
+    fs::create_dir_all(home.join(".config")).expect("create ~/.config");
+    symlink(
+        guest.path("mnt/dotfiles/.config/nvim"),
+        home.join(".config/nvim"),
+    )
+    .expect("link nvim");
+    let dotfiles = guest.path("mnt/dotfiles");
+    for args in [&["dotfiles"][..], &["dotfiles", "status"]] {
+        let output = guest.lmx(args, &guest.config());
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            format!(
+                "Dotfiles  {}\n\
+                 Home      {}\n\
+                 \n\
+                 linked    ~/.config/nvim\n\
+                 missing   ~/.tmux.conf\n\
+                 missing   ~/.zshrc\n\
+                 missing   ~/.config/starship.toml\n\
+                 stale     ~/.vimrc links to {}\n\
+                 conflict  ~/.gitconfig is a file\n\
+                 \n\
+                 Open a new shell, or run lmx dotfiles link, to update the links.\n\
+                 Move the conflicting paths aside, then open a new shell.\n",
+                dotfiles.display(),
+                home.display(),
+                dotfiles.join(".vimrc").display()
+            )
+        );
+    }
+    assert!(fs::symlink_metadata(home.join(".zshrc")).is_err());
+    assert!(fs::symlink_metadata(home.join(".vimrc")).is_ok());
+}
+
+#[test]
+fn dotfiles_link_runs_only_as_the_development_account() {
+    let (guest, uid) = dotfiles_guest();
+    guest.configure(|config| config["user"]["uid"] = json!(uid + 1));
+    let output = guest.lmx(&["dotfiles", "link", "--quiet"], &guest.config());
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        format!(
+            "lmx: lmx dotfiles link runs only as dev (uid {}), not as uid {uid}: the links in {} \
+             belong to dev\n",
+            uid + 1,
+            guest.path("home/dev").display()
+        )
+    );
+    assert!(fs::symlink_metadata(guest.path("home/dev/.zshrc")).is_err());
+}
+
+#[test]
+fn dotfiles_without_a_directory_do_nothing() {
+    let guest = Guest::new();
+    let output = guest.lmx(&["dotfiles", "link", "--quiet"], &guest.config());
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        output.stdout.is_empty() && output.stderr.is_empty(),
+        "{output:?}"
+    );
+    for args in [&["dotfiles"][..], &["dotfiles", "link"]] {
+        let output = guest.lmx(args, &guest.config());
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            "No dotfiles are configured in this VM.\n\
+             Set [shell] dotfiles in limanix.toml, then run limanix update on the Mac.\n"
+        );
+    }
+}
+
+#[test]
+fn dotfiles_fail_without_the_mounted_directory() {
+    let (guest, _) = dotfiles_guest();
+    let dotfiles = guest.path("mnt/dotfiles");
+    fs::rename(&dotfiles, guest.path("mnt/elsewhere")).expect("move the dotfiles away");
+    for args in [&["dotfiles", "link", "--quiet"][..], &["dotfiles"]] {
+        let output = guest.lmx(args, &guest.config());
+        assert_eq!(output.status.code(), Some(1), "{args:?}: {output:?}");
+        assert!(output.stdout.is_empty(), "{args:?}: {output:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).starts_with(&format!(
+                "lmx: cannot read the dotfiles at {}: ",
+                dotfiles.display()
+            )),
+            "{args:?}: {output:?}"
+        );
+    }
+    assert!(
+        fs::symlink_metadata(guest.path("home/dev/.vimrc")).is_ok(),
+        "no link is removed while the dotfiles cannot be read"
+    );
+
+    let output = guest.lmx(&["dotfiles", "link"], &guest.path("missing.json"));
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stderr).starts_with("lmx: cannot read "));
+}
+
+#[test]
+fn dotfiles_change_nothing_while_they_are_not_mounted() {
+    let (guest, _) = dotfiles_guest();
+    let dotfiles = guest.path("mnt/dotfiles");
+    let output = guest.lmx(&["dotfiles", "link", "--quiet"], &guest.config());
+    assert!(output.status.success(), "{output:?}");
+
+    fs::remove_dir_all(&dotfiles).expect("remove the dotfiles");
+    fs::create_dir(&dotfiles).expect("leave the empty mount point");
+    guest.write("proc/self/mountinfo", MOUNTINFO);
+    for args in [&["dotfiles", "link", "--quiet"][..], &["dotfiles"]] {
+        let output = guest.lmx(args, &guest.config());
+        assert_eq!(output.status.code(), Some(1), "{args:?}: {output:?}");
+        assert!(output.stdout.is_empty(), "{args:?}: {output:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            format!(
+                "lmx: the dotfiles at {} are not mounted\n",
+                dotfiles.display()
+            ),
+            "{args:?}"
+        );
+    }
+    for name in [".zshrc", ".tmux.conf", ".config/nvim"] {
+        assert!(
+            fs::symlink_metadata(guest.path(&format!("home/dev/{name}"))).is_ok(),
+            "{name} was removed while the dotfiles were not mounted"
+        );
+    }
+
+    let output = guest.lmx(&["doctor", "--json"], &guest.config());
+    let answer: Value = serde_json::from_slice(&output.stdout).expect("one JSON answer");
+    let checks = answer["data"]["checks"].as_array().expect("checks");
+    assert_eq!(
+        checks.last(),
+        Some(&json!({
+            "check": "dotfiles",
+            "status": "failed",
+            "message": format!("the dotfiles at {} are not mounted", dotfiles.display()),
+            "hint": "The host mounts the directory; limanix update on the Mac mounts it again."
+        }))
+    );
+}
+
+#[test]
+fn doctor_checks_the_dotfiles_when_there_are_some() {
+    let (guest, _) = dotfiles_guest();
+    let dotfiles = guest.path("mnt/dotfiles");
+    let check = |guest: &Guest| {
+        let output = guest.lmx(&["doctor", "--json"], &guest.config());
+        let answer: Value = serde_json::from_slice(&output.stdout).expect("one JSON answer");
+        let checks = answer["data"]["checks"].as_array().expect("checks").clone();
+        assert_eq!(
+            checks
+                .iter()
+                .filter(|check| check["check"] == "dotfiles")
+                .count(),
+            1,
+            "{checks:?}"
+        );
+        checks.last().expect("a last check").clone()
+    };
+
+    assert_eq!(
+        check(&guest),
+        json!({
+            "check": "dotfiles",
+            "status": "warning",
+            "message": format!(
+                "~/.gitconfig is in the way of the dotfiles from {}.",
+                dotfiles.display()
+            ),
+            "hint": "Move it aside, then open a new shell."
+        })
+    );
+
+    fs::remove_file(guest.path("home/dev/.gitconfig")).expect("move the file aside");
+    let output = guest.lmx(&["dotfiles", "link", "--quiet"], &guest.config());
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        check(&guest),
+        json!({
+            "check": "dotfiles",
+            "status": "ok",
+            "message": format!("5 dotfiles from {} are linked.", dotfiles.display())
+        })
+    );
+
+    fs::rename(&dotfiles, guest.path("mnt/elsewhere")).expect("move the dotfiles away");
+    let failed = check(&guest);
+    assert_eq!(failed["status"], "failed", "{failed}");
+    assert_eq!(
+        failed["hint"],
+        "The host mounts the directory; limanix update on the Mac mounts it again."
     );
 }

@@ -641,7 +641,7 @@ fn network(facts: &Facts) -> Vec<String> {
 }
 
 /// Items as a phrase: `a`, `a and b`, `a, b and c`.
-fn listing(items: &[String]) -> String {
+pub(crate) fn listing(items: &[String]) -> String {
     match items {
         [] => String::new(),
         [only] => only.clone(),

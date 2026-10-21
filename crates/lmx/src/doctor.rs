@@ -13,7 +13,7 @@ use lmx_model::{
 
 use crate::{
     cli::OutputArgs,
-    findings, output,
+    dotfiles, findings, output,
     owner::{self, CallError},
     palette::{Paint, Palette},
     system::System,
@@ -28,6 +28,7 @@ pub(crate) fn run(system: &System, args: &OutputArgs) -> io::Result<ExitCode> {
     let (markers, errors) = generations::read(&system.generation_paths());
     let mut checks = vec![config(system), owner_check(&owner)];
     checks.extend(conditions(owner.as_ref().ok(), &markers, errors.first()));
+    checks.extend(dotfiles::check(system));
     if args.json {
         output::write_json(&Envelope::success(Doctor {
             checks: checks.clone(),
