@@ -1,6 +1,7 @@
 # lmx
 
 [![License: Apache-2.0](https://img.shields.io/github/license/limanix/lmx?label=license)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/limanix/lmx)](https://github.com/limanix/lmx/releases)
 
 <p align="center">
   <img src=".github/assets/readme-header.png"
@@ -8,52 +9,59 @@
        width="100%">
 </p>
 
-`lmx` looks after a [LimaNix](https://limanix.dev) VM from the inside. In the
-guest shell it answers your questions about the VM; for the Mac it speaks a
-versioned JSON contract over SSH. Its daemon, `lmxd`, keeps the Nix store from
-filling the disk and carries out updates from build to finalize.
+**Guest CLI and daemon for [LimaNix](https://limanix.dev) development
+environments.**
+
+LimaNix runs NixOS development VMs on macOS. `lmx` is the part that lives
+inside every VM: a command that tells you what is going on in the guest, and a
+daemon, `lmxd`, that keeps the VM healthy and carries out the updates you start
+on your Mac. It comes with every LimaNix VM; there is nothing to install.
 
 [Documentation](https://limanix.dev/categories/lmx/index.html) |
-[Everyday commands](guides/everyday.md) |
+[Getting started](https://limanix.dev/categories/client/getting-started.html) |
 [Releases](https://github.com/limanix/lmx/releases)
 
-## Get started
+## Features
 
-`lmx` comes with every LimaNix VM; there is nothing to install. New to LimaNix?
-Start with
-[Getting started](https://limanix.dev/categories/client/getting-started.html).
-Open a guest shell on your Mac and ask it:
+- **Know what is going on.** `lmx status` shows the VM at a glance, and
+  `lmx doctor` names a problem and what to do about it. Every new shell opens
+  with a short welcome.
+- **Help for your tools.** `lmx help go` shows what a module installed: its
+  commands, common tasks and guide.
+- **Your Mac's clipboard.** `pbcopy` and `pbpaste` reach the Mac clipboard,
+  also from inside tmux.
+- **Your dotfiles in every VM.** One directory on the Mac, linked into the home
+  of each VM; edits are live.
+- **Sessions that survive.** `limanix shell --session work` returns you to the
+  same terminal session.
+- **Safe updates.** `lmxd` builds the new NixOS generation, checks it after the
+  restart, and only then removes the old one.
+- **A disk that does not fill up.** `lmxd` cleans the Nix store before it runs
+  out of space.
+
+## Where it fits
+
+| Repository | Runs on | Role |
+| -- | -- | -- |
+| [client](https://github.com/limanix/client) | Mac | `limanix` creates, updates and opens the VMs |
+| [modules](https://github.com/limanix/modules) | VM | The NixOS catalog: shells, toolchains and services |
+| **lmx** | VM | The guest command and daemon; answers the Mac over a versioned contract |
+
+## A quick look
 
 ```console
 limanix shell dev-box   # on the Mac: open a shell in the VM
-lmx help                # in the guest
+lmx help                # the VM, its modules and commands
+lmx status              # generations, disk and network
+lmx doctor              # what is wrong, and what to do
 ```
-
-`lmx status` shows how the guest is doing, and `lmx doctor` tells you what is
-wrong and what to do about it.
-
-## Documentation
-
-| Guide | Contents |
-| -- | -- |
-| [Everyday commands](guides/everyday.md) | Status, the clipboard, sessions, dotfiles and the welcome. |
-| [How an update works](guides/updates.md) | `limanix update` from the Mac into the guest and back. |
-| [Disk and the Nix store](guides/disk.md) | What `lmx` cleans up, and what it never touches. |
-| [When something is wrong](guides/troubleshooting.md) | From a symptom to the command that explains it. |
-| [The daemon under systemd](guides/daemon.md) | How `lmxd` runs and who may ask it what. |
-| [Host contract](guides/contract.md) | The JSON the Mac and `lmx` exchange. |
-| [Development](guides/development.md) | Checks, crates, rules and releases. |
-
-The guides are published at
-[limanix.dev](https://limanix.dev/categories/lmx/index.html). The
-[docs repository](https://github.com/limanix/docs) assembles them with the
-client and module documentation.
 
 ## Contributing
 
 Follow the
 [contribution guide](https://github.com/limanix/.github/blob/main/CONTRIBUTING.md)
-when changing `lmx`. See [Development](guides/development.md) and
-[Taskfile.yml](Taskfile.yml) for local checks, release builds and documentation
-tasks. Use [Issues](https://github.com/limanix/lmx/issues) for questions, bug
-reports and feature requests.
+and [Development](guides/development.md). Use
+[Issues](https://github.com/limanix/lmx/issues) for questions, bug reports and
+feature requests.
+
+Licensed under [Apache 2.0](LICENSE).
