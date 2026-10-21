@@ -28,6 +28,7 @@ flowchart LR
 | Find out what is wrong and what to do | `lmx doctor` |
 | Learn why the Mac cannot reach my service on a port | `lmx net check 8080` |
 | Copy a file to the Mac clipboard | `pbcopy < notes.txt` |
+| See which of my dotfiles from the Mac are linked | `lmx dotfiles` |
 | Read the build output of the last update | `sudo lmx logs apply --previous` |
 | Make room in the Nix store now | `sudo lmx store reserve` |
 
@@ -40,7 +41,7 @@ flowchart LR
 
 | Page | Read it to |
 | -- | -- |
-| [Everyday commands](everyday.md) | Use status, the clipboard, sessions, packages and the welcome |
+| [Everyday commands](everyday.md) | Use status, the clipboard, sessions, packages, dotfiles and the welcome |
 | [How an update works](updates.md) | Follow `limanix update` from the Mac into the guest and back |
 | [Disk and the Nix store](disk.md) | Understand what `lmx` cleans up, and what it never touches |
 | [When something is wrong](troubleshooting.md) | Go from a symptom to the command that explains it |

@@ -54,7 +54,8 @@ flowchart LR
   tests feed the parser fixed output.
 - Owner jobs run only in `lmxd`. `lmx` never runs them itself when the daemon is
   down.
-- Commands that need your terminal, the clipboard and sessions, stay in `lmx`.
+- Commands that need your terminal or your home, the clipboard, sessions and
+  dotfiles, stay in `lmx`.
 - `lmx` and `lmx-ipc` do not depend on Solti; only `lmxd` does.
 - `lmxd` runs programs only as Solti tasks, with absolute paths from the
   configuration.

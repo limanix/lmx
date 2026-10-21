@@ -17,7 +17,7 @@ use crate::{
 };
 
 /// Commands for use inside the VM, after `lmx help TOPIC`.
-const INSIDE: [(&str, &str); 10] = [
+const INSIDE: [(&str, &str); 11] = [
     (
         "lmx info",
         "Show the kernel, disk, shared folders, failed units.",
@@ -32,6 +32,10 @@ const INSIDE: [(&str, &str); 10] = [
         "Check why a port may be unreachable from the Mac.",
     ),
     ("lmx welcome", "Show the workspace welcome again."),
+    (
+        "lmx dotfiles",
+        "Show which of your dotfiles from the Mac are linked.",
+    ),
     (
         "nix shell nixpkgs#PKG",
         "Run a tool no module gives; nix profile add keeps it.",
@@ -255,11 +259,13 @@ mod tests {
             theme: Theme {
                 flavor: "mocha".into(),
                 palette: Default::default(),
+                ansi: Default::default(),
             },
             session: Session {
                 command: None,
-                providers: vec!["lmx:tmux".into()],
+                providers: vec![r#"[shell] multiplexer = "tmux""#.into()],
             },
+            dotfiles: None,
             tools: Tools {
                 ip: "ip".into(),
                 systemctl: "systemctl".into(),
@@ -307,6 +313,7 @@ mod tests {
             "lmx doctor",
             "lmx net check PORT",
             "lmx welcome",
+            "lmx dotfiles",
             "limanix-session NAME",
             "nix shell nixpkgs#PKG",
             "pbcopy",

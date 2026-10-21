@@ -36,7 +36,7 @@ wrong and what to do about it.
 
 | Guide | Contents |
 | -- | -- |
-| [Everyday commands](guides/everyday.md) | Status, the clipboard, sessions and the welcome. |
+| [Everyday commands](guides/everyday.md) | Status, the clipboard, sessions, dotfiles and the welcome. |
 | [How an update works](guides/updates.md) | `limanix update` from the Mac into the guest and back. |
 | [Disk and the Nix store](guides/disk.md) | What `lmx` cleans up, and what it never touches. |
 | [When something is wrong](guides/troubleshooting.md) | From a symptom to the command that explains it. |

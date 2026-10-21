@@ -5,7 +5,8 @@
 //! never receive configuration from the host at runtime.
 //!
 //! Unknown fields are rejected. The file and the binary come from one generation, and a mismatch
-//! between them is a packaging error rather than a compatibility case.
+//! between them is a packaging error rather than a compatibility case. An optional field, such as
+//! [`Config::dotfiles`], may be missing: a platform that does not use it leaves it out.
 
 use std::{
     collections::BTreeMap,
@@ -45,6 +46,9 @@ pub struct Config {
     pub theme: Theme,
     /// Named-session provider selected by catalog modules.
     pub session: Session,
+    /// Absolute guest path of the dotfiles directory the host mounts from the Mac.
+    #[serde(default)]
+    pub dotfiles: Option<String>,
     /// Absolute paths of the system tools the binaries run.
     pub tools: Tools,
 }
@@ -157,10 +161,14 @@ pub struct Ports {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Theme {
-    /// Catppuccin flavor, such as `mocha`.
+    /// `system`, the terminal's own colors and background.
     pub flavor: String,
     /// The flavor's colors by name, such as `blue`, as `#rrggbb`.
     pub palette: BTreeMap<String, String>,
+    /// With the `system` flavor, the terminal color that stands for each name of `palette`: one
+    /// of the terminal's 16 colors, 0 to 15, or `None` for its default color.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub ansi: BTreeMap<String, Option<u8>>,
 }
 
 /// Failure to obtain a usable configuration.
@@ -218,7 +226,6 @@ struct Header {
 mod tests {
     use super::*;
 
-    /// Configuration as the platform renders it for schema 1.
     const SAMPLE: &str = r##"{
         "schema": 1,
         "vm": {"name": "dev-box", "arch": "arm64", "system": "NixOS 26.05"},
@@ -229,7 +236,8 @@ mod tests {
         "health": {"units": ["sshd.service", "lmx.socket"]},
         "network": {"ports": {"tcp": [8080], "udp": []}},
         "theme": {"flavor": "mocha", "palette": {"blue": "#89b4fa", "red": "#f38ba8"}},
-        "session": {"command": null, "providers": ["lmx:tmux"]},
+        "session": {"command": null, "providers": ["[shell] multiplexer = \"tmux\""]},
+        "dotfiles": "/mnt/dotfiles",
         "tools": {
             "ip": "/run/current-system/sw/bin/ip",
             "systemctl": "/run/current-system/sw/bin/systemctl",
@@ -256,6 +264,40 @@ mod tests {
         assert_eq!(config.network.ports.tcp, [8080]);
         assert_eq!(config.theme.palette["blue"], "#89b4fa");
         assert_eq!(config.session.command, None);
+        assert_eq!(config.dotfiles.as_deref(), Some("/mnt/dotfiles"));
+    }
+
+    #[test]
+    fn dotfiles_are_optional() {
+        for other in [
+            SAMPLE.replace("\"dotfiles\": \"/mnt/dotfiles\",", ""),
+            SAMPLE.replace("\"/mnt/dotfiles\"", "null"),
+        ] {
+            let config = Config::from_json(other.as_bytes()).expect("valid configuration");
+            assert_eq!(config.dotfiles, None);
+        }
+    }
+
+    #[test]
+    fn terminal_colors_come_with_the_system_flavor() {
+        let other = SAMPLE.replace(
+            r##""theme": {"flavor": "mocha", "palette": {"blue": "#89b4fa", "red": "#f38ba8"}}"##,
+            r##""theme": {"flavor": "system", "palette": {"blue": "#89b4fa"}, "ansi": {"blue": 4, "text": null}}"##,
+        );
+        assert_ne!(other, SAMPLE, "the sample has the replaced theme");
+        let config = Config::from_json(other.as_bytes()).expect("valid configuration");
+        assert_eq!(config.theme.flavor, "system");
+        assert_eq!(config.theme.ansi.get("blue"), Some(&Some(4)));
+        assert_eq!(config.theme.ansi.get("text"), Some(&None));
+
+        let config = Config::from_json(SAMPLE.as_bytes()).expect("valid configuration");
+        assert!(config.theme.ansi.is_empty());
+
+        let wide = other.replace("\"blue\": 4", "\"blue\": 256");
+        assert!(
+            Config::from_json(wide.as_bytes()).is_err(),
+            "a terminal color is a byte"
+        );
     }
 
     #[test]

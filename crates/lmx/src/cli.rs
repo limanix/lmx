@@ -51,6 +51,8 @@ pub(crate) enum Command {
     Clipboard(ClipboardCommand),
     /// Open a named session with the selected provider; also installed as limanix-session.
     Session(SessionArgs),
+    /// Show which of your dotfiles from the Mac are linked into your home, or link them.
+    Dotfiles(DotfilesArgs),
 }
 
 /// Arguments of `lmx status`.
@@ -219,6 +221,31 @@ pub(crate) struct SessionArgs {
     pub(crate) name: OsString,
 }
 
+/// Arguments of `lmx dotfiles`.
+#[derive(Debug, Args)]
+pub(crate) struct DotfilesArgs {
+    /// Dotfiles operation; without one, `lmx dotfiles` shows the links.
+    #[command(subcommand)]
+    pub(crate) command: Option<DotfilesCommand>,
+}
+
+/// Dotfiles operations.
+#[derive(Debug, Subcommand)]
+pub(crate) enum DotfilesCommand {
+    /// Show the linked entries, the conflicts and the missing links without changing anything.
+    Status,
+    /// Link the dotfiles into your home; every shell of yours does it as it starts.
+    Link(LinkArgs),
+}
+
+/// Arguments of `lmx dotfiles link`.
+#[derive(Debug, Args)]
+pub(crate) struct LinkArgs {
+    /// Print nothing but errors, as a starting shell runs it.
+    #[arg(long)]
+    pub(crate) quiet: bool,
+}
+
 /// Output selection shared by commands that answer the host.
 #[derive(Debug, Args)]
 pub(crate) struct OutputArgs {
@@ -305,6 +332,32 @@ mod tests {
         };
         assert_eq!((args.kind, args.previous), (LogKind::Apply, true));
         assert!(Cli::try_parse_from(["lmx", "logs", "build"]).is_err());
+    }
+
+    #[test]
+    fn dotfiles_show_the_links_or_link_them() {
+        for args in [&["lmx", "dotfiles"][..], &["lmx", "dotfiles", "status"]] {
+            let cli = Cli::try_parse_from(args).expect("a dotfiles status");
+            let Some(Command::Dotfiles(dotfiles)) = cli.command else {
+                panic!("not dotfiles");
+            };
+            assert!(
+                matches!(dotfiles.command, None | Some(DotfilesCommand::Status)),
+                "{args:?}"
+            );
+        }
+        let cli =
+            Cli::try_parse_from(["lmx", "dotfiles", "link", "--quiet"]).expect("a dotfiles link");
+        let Some(Command::Dotfiles(DotfilesArgs {
+            command: Some(DotfilesCommand::Link(link)),
+        })) = cli.command
+        else {
+            panic!("not a dotfiles link");
+        };
+        assert!(link.quiet);
+        assert!(Cli::try_parse_from(["lmx", "dotfiles", "--quiet"]).is_err());
+        assert!(Cli::try_parse_from(["lmx", "dotfiles", "status", "--quiet"]).is_err());
+        assert!(Cli::try_parse_from(["lmx", "dotfiles", "unlink"]).is_err());
     }
 
     #[test]

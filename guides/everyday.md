@@ -188,12 +188,63 @@ the provider your modules select, such as tmux. From the Mac,
 Without a provider, `limanix-session` tells you which module to select. A plain
 shell needs no provider.
 
+## Your dotfiles
+
+Keep your shell, editor and Git settings in a directory on the Mac that is
+shaped like a home: `.zshrc`, `.tmux.conf`, `.gitconfig`, `.config/nvim`. Name
+it in `limanix.toml` and run `limanix update`:
+
+```toml
+[shell]
+dotfiles = "~/dotfiles"
+```
+
+The Mac shares the directory with the guest at `/mnt/dotfiles`. Every shell you
+open links its entries into your home before it reads your startup files, such
+as `~/.zshenv` or `~/.bash_profile`. An edit on the Mac counts in the guest at
+once: `lmx` only makes the links.
+
+| In the directory | In your home |
+| -- | -- |
+| `.zshrc`, `.tmux.conf` and every other name that starts with `.` | A link of the same name, such as `~/.zshrc` |
+| `.config/nvim` and every other entry of `.config` | A link in `~/.config`, such as `~/.config/nvim`; `~/.config` itself stays a directory of the guest |
+| `.git`, `.github`, `.gitignore`, `.gitmodules` and `.DS_Store` | Nothing |
+| `README.md`, `install.sh` and every other name without a leading `.` | Nothing |
+
+`lmx dotfiles` shows the links and changes nothing:
+
+```console
+$ lmx dotfiles
+Dotfiles  /mnt/dotfiles
+Home      /home/dev
+
+linked    ~/.tmux.conf
+linked    ~/.config/nvim
+missing   ~/.zshrc
+conflict  ~/.gitconfig is a file
+
+Open a new shell, or run lmx dotfiles link, to update the links.
+Move the conflicting paths aside, then open a new shell.
+```
+
+`lmx` changes only links into the dotfiles. A file, a directory or a link to
+anywhere else stays as it is, and `lmx dotfiles` names it a `conflict`. Move it
+aside, for example with `mv ~/.gitconfig ~/.gitconfig.guest`, and open a new
+shell. A link to an entry you deleted on the Mac goes away with the next shell.
+While the directory is not mounted, `lmx` links and removes nothing and says so
+in every shell: an empty mount point would make every link look stale.
+
+`lmx dotfiles link` makes the links now and prints each change. It runs as your
+account and refuses `sudo`, so every link in your home belongs to you.
+
 ## Colors
 
 `lmx` colors its text with the
 [theme](https://limanix.dev/categories/client/configuration.html#choose-a-theme)
-you choose in `[theme]` of `limanix.toml`, Catppuccin Mocha by default. Output
-that does not go to a terminal, `NO_COLOR` and `TERM=dumb` all turn colors off.
+you choose in `[theme]` of `limanix.toml`. The default `system` flavor uses the
+terminal's own colors, so the text follows the theme of the terminal on your
+Mac; a Catppuccin flavor uses its palette. Output that does not go to a
+terminal, `NO_COLOR` and `TERM=dumb` all turn colors off.
 
 ## Which version runs here?
 

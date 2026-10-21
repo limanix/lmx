@@ -9,8 +9,10 @@ flowchart LR
     q -->|"the Mac cannot reach a port"| net["lmx net check PORT"]
     q -->|"I need the output of an update or cleanup"| logs["sudo lmx logs KIND"]
     q -->|"the disk is full"| disk["sudo lmx store reserve"]
+    q -->|"a dotfile from the Mac has no effect"| dotfiles["lmx dotfiles"]
     doctor --> fix["Each finding says what to do next"]
     net --> fix
+    dotfiles --> fix
 ```
 
 ## `lmx doctor`
@@ -33,8 +35,10 @@ Every line is one check, and the indented line under it says what to do.
 | `unknown` | Your account may not read what the check needs; run `sudo lmx doctor`. |
 
 It checks the configuration that NixOS wrote for `lmx`, whether `lmxd` answers
-with the same version as `lmx`, the state of the generations, and the disk. It
-works even when `lmxd` is down: that is one of the things it finds.
+with the same version as `lmx`, the state of the generations, and the disk. With
+`[shell] dotfiles` in `limanix.toml`, its `dotfiles` check counts the links to
+your dotfiles and names the paths in their way. It works even when `lmxd` is
+down: that is one of the things it finds.
 
 > [!TIP]
 >
@@ -132,6 +136,30 @@ The update already restarted the VM. Run `sudo lmx logs apply --previous`.
 The terminal on the Mac refused to share the clipboard, or did not answer within
 10 seconds. Allow clipboard reads in its settings;
 [Terminal and clipboard](https://limanix.dev/terminal.html) shows where.
+
+</details>
+
+<details>
+<summary>A dotfile from the Mac has no effect in the guest</summary>
+
+Run `lmx dotfiles`. A `conflict` line names a file, a directory or a link of
+your own that is in the way: `lmx` never replaces it. Move it aside, for example
+with `mv ~/.zshrc ~/.zshrc.guest`, and open a new shell. A `missing` line goes
+away with the next shell, or at once with `lmx dotfiles link`. Only names that
+start with `.` and the entries of `.config` are linked; see
+[Your dotfiles](everyday.md#your-dotfiles).
+
+</details>
+
+<details>
+<summary>Every shell starts with "lmx: the dotfiles at /mnt/dotfiles are not mounted"</summary>
+
+The guest no longer sees the directory that `[shell] dotfiles` names on the Mac:
+its mount failed, or the directory was moved or deleted, which the message
+`cannot read the dotfiles at /mnt/dotfiles` reports. Your links stay until it is
+back. Fix the path in `limanix.toml` if it changed, then run `limanix update` on
+the Mac; it mounts the directory again. `lmx doctor` reports the same as a
+failed `dotfiles` check.
 
 </details>
 

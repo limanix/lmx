@@ -20,7 +20,7 @@ flowchart LR
 | Kind of command | Runs in | Without `lmxd` |
 | -- | -- | -- |
 | Facts: `status`, `info`, `doctor`, `net check`, `version` | `lmx`, as you | Work; `status` marks the `Owner` line unknown |
-| Your terminal: `pbcopy`, `pbpaste`, sessions, the welcome | `lmx`, as you | Work |
+| Your terminal and home: `pbcopy`, `pbpaste`, sessions, the welcome, `dotfiles link` | `lmx`, as you | Work |
 | Owner jobs: `store reserve`, `apply`, `apply cancel`, `status --wait` | `lmxd`, as root | Fail with exit status 3; `lmx` never runs them itself |
 
 ## Who may ask what
@@ -70,10 +70,11 @@ another daemon still serves, and two builds never run at once.
 
 NixOS writes `/etc/lmx/config.json` as part of every generation: the VM name,
 your account, the disk thresholds, the health checks, the open ports, the
-colors, and the absolute paths of the tools `lmxd` runs. Beside it,
-`/etc/lmx/help.json` holds the help cards of the modules in the generation, for
-`lmx help TOPIC`. Nothing on the Mac changes it at runtime. Each generation
-carries its own configuration, and the two always match.
+colors, where your dotfiles are mounted, and the absolute paths of the tools
+`lmxd` runs. Beside it, `/etc/lmx/help.json` holds the help cards of the modules
+in the generation, for `lmx help TOPIC`. Nothing on the Mac changes it at
+runtime. Each generation carries its own configuration, and the two always
+match.
 
 <details>
 <summary>Read the daemon's own log</summary>
