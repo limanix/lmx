@@ -66,7 +66,7 @@ On the Mac
 
 Tools come from the modules selected in your TOML configuration.
 No session provider is required for a normal shell.
-Guide: https://limanix.dev/categories/client/getting-started.html
+Docs: https://docs.limanix.dev
 ";
 
 /// Columns of a command in the list inside the VM, after the two-column indent.
