@@ -6,17 +6,13 @@ includes:
     # v0.1.0
     taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/3aa8c569bdc71b41fa50fc33f66e2ef1317813ed/taskfiles/rust/Taskfile.yml
     internal: true
-  python:
-    # v0.1.0
-    taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/3aa8c569bdc71b41fa50fc33f66e2ef1317813ed/taskfiles/python/Taskfile.yml
-    internal: true
   markdown:
     # v0.1.0
     taskfile: https://raw.githubusercontent.com/mr-chelyshkin/tasks/3aa8c569bdc71b41fa50fc33f66e2ef1317813ed/taskfiles/markdown/Taskfile.yml
     internal: true
 
 vars:
-  markdown_paths: README.md guides
+  markdown_paths: README.md contract/README.md
   version:
     sh: sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)"/\1/p' Cargo.toml | head -n 1
 
@@ -67,21 +63,6 @@ tasks:
       - task: markdown:fmt/fix
         vars:
           FMT_ARGS: '{{.markdown_paths}}'
-
-  docs/prepare:
-    desc: Prepare LimaNix site docs
-    vars:
-      lmx_ref:
-        sh: |
-          {{if .LMX_REF}}
-          printf '%s\n' {{.LMX_REF | shellQuote}}
-          {{else}}
-          git -C {{.ROOT_DIR | shellQuote}} rev-parse HEAD
-          {{end}}
-    cmds:
-      - task: python:exec
-        vars:
-          CMD: python scripts/build_docs.py --ref {{.lmx_ref | shellQuote}}
 
   release/build:
     desc: Build binary

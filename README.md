@@ -1,5 +1,4 @@
-# lmx
-
+[![Release](https://img.shields.io/github/v/release/limanix/lmx)](https://github.com/limanix/lmx/releases)
 [![License: Apache-2.0](https://img.shields.io/github/license/limanix/lmx?label=license)](LICENSE)
 
 <p align="center">
@@ -8,52 +7,51 @@
        width="100%">
 </p>
 
-`lmx` looks after a [LimaNix](https://limanix.dev) VM from the inside. In the
-guest shell it answers your questions about the VM; for the Mac it speaks a
-versioned JSON contract over SSH. Its daemon, `lmxd`, keeps the Nix store from
-filling the disk and carries out updates from build to finalize.
+<p align="center">
+  <a href="https://docs.limanix.dev"><b>Docs</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://docs.limanix.dev/inside/lmx"><b>Using lmx</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://docs.limanix.dev/reference/lmx"><b>Command reference</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://docs.limanix.dev/architecture"><b>How it works</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/limanix/lmx/releases"><b>Releases</b></a>
+</p>
 
-[Documentation](https://limanix.dev/categories/lmx/index.html) |
-[Everyday commands](guides/everyday.md) |
-[Releases](https://github.com/limanix/lmx/releases)
+The guest side of [LimaNix](https://limanix.dev), which runs NixOS development
+VMs on a Mac. [`limanix`](https://github.com/limanix/client) creates and updates
+a VM from one file, the [catalog](https://github.com/limanix/modules) gives it
+shells, toolchains and services, and `lmx` runs it from the inside. Every VM
+comes with `lmx`; there is nothing to install.
 
-## Get started
-
-`lmx` comes with every LimaNix VM; there is nothing to install. New to LimaNix?
-Start with
-[Getting started](https://limanix.dev/categories/client/getting-started.html).
-Open a guest shell on your Mac and ask it:
-
-```console
-limanix shell dev-box   # on the Mac: open a shell in the VM
-lmx help                # in the guest
+```text
+     Mac                       ┌─ VM (NixOS) ───────────────────────────────┐
+┌───────────┐   SSH, --json    │ ┌───────────┐  local socket  ┌───────────┐ │
+│  limanix  │ ─────────────────┼>│    lmx    │ ─────────────> │   lmxd    │ │
+└───────────┘                  │ └───────────┘                └───────────┘ │
+                               │       ^                                    │
+                               │  your shell                                │
+                               └────────────────────────────────────────────┘
 ```
 
-`lmx status` shows how the guest is doing, and `lmx doctor` tells you what is
-wrong and what to do about it.
-
-## Documentation
-
-| Guide | Contents |
+| Part | What it does |
 | -- | -- |
-| [Everyday commands](guides/everyday.md) | Status, the clipboard, sessions, dotfiles and the welcome. |
-| [How an update works](guides/updates.md) | `limanix update` from the Mac into the guest and back. |
-| [Disk and the Nix store](guides/disk.md) | What `lmx` cleans up, and what it never touches. |
-| [When something is wrong](guides/troubleshooting.md) | From a symptom to the command that explains it. |
-| [The daemon under systemd](guides/daemon.md) | How `lmxd` runs and who may ask it what. |
-| [Host contract](guides/contract.md) | The JSON the Mac and `lmx` exchange. |
-| [Development](guides/development.md) | Checks, crates, rules and releases. |
+| `lmx` | The command in the VM, for you and for `limanix`: the welcome, `lmx status`, `lmx doctor`, `lmx help`, dotfile links and the Mac clipboard |
+| `lmxd` | A root daemon: builds each new system, checks it after the restart, removes the old one and keeps the Nix store from filling the disk |
+| [Host contract](contract/README.md) | The versioned JSON that `limanix` reads from `lmx`, with examples in `contract/v1` |
 
-The guides are published at
-[limanix.dev](https://limanix.dev/categories/lmx/index.html). The
-[docs repository](https://github.com/limanix/docs) assembles them with the
-client and module documentation.
+## Development
+
+Every check runs in the container that CI uses; you need
+[Task](https://taskfile.dev) 3.53.1 or newer and Docker. `task --list` shows the
+checks, and `task release/build ARCH=aarch64` builds a release archive in
+`dist/`. A tag `v<version>` on `main` publishes the archives for `aarch64` and
+`x86_64`; the client then pins the release in its `lmx.json`.
 
 ## Contributing
 
 Follow the
-[contribution guide](https://github.com/limanix/.github/blob/main/CONTRIBUTING.md)
-when changing `lmx`. See [Development](guides/development.md) and
-[Taskfile.yml](Taskfile.yml) for local checks, release builds and documentation
-tasks. Use [Issues](https://github.com/limanix/lmx/issues) for questions, bug
-reports and feature requests.
+[contribution guide](https://github.com/limanix/.github/blob/main/CONTRIBUTING.md).
+Use [Issues](https://github.com/limanix/lmx/issues) for questions, bug reports
+and feature requests. Licensed under [Apache 2.0](LICENSE).

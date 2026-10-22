@@ -7,7 +7,7 @@ one JSON answer from standard output. This page defines contract version 1.
 >
 > This page is for people who change the LimaNix client or build their own tools
 > on top of `lmx`. For day-to-day use, start with
-> [Everyday commands](everyday.md).
+> [The lmx command](https://docs.limanix.dev/inside/lmx).
 
 ## Read one answer
 
@@ -114,8 +114,7 @@ system built before `lmx` existed. A marker that exists but cannot be read also
 gives `null` and adds a `generations` problem. The host compares the three
 generations to tell whether a build or a restart is still needed.
 
-Examples: [complete](../contract/v1/status.json),
-[partial](../contract/v1/status-partial.json).
+Examples: [complete](v1/status.json), [partial](v1/status-partial.json).
 
 ## `lmx store reserve`
 
@@ -136,8 +135,8 @@ running is shared. Interrupting the command does not stop the collection.
 
 The host treats `disk.low` as a warning: the update may still succeed.
 
-Examples: [enough room](../contract/v1/store-reserve.json),
-[disk low](../contract/v1/store-reserve-disk-low.json).
+Examples: [enough room](v1/store-reserve.json),
+[disk low](v1/store-reserve-disk-low.json).
 
 ## `lmx status --wait converged -g GENERATION`
 
@@ -159,7 +158,7 @@ such as `90s`, `10m` or `1h`; the default is 10 minutes.
 `details` of `finalize.failed`, `system.degraded` and `wait.timeout` has
 `conditions`, the conditions `lmxd` reported last.
 
-Example: [finalize failed](../contract/v1/wait-finalize-failed.json).
+Example: [finalize failed](v1/wait-finalize-failed.json).
 
 ## `lmx apply -g GENERATION`
 
@@ -199,9 +198,8 @@ restart the VM to boot the generation.
 Without `--json`, the command prints the build's lines on their own streams and
 a closing sentence.
 
-Examples: [built](../contract/v1/apply-restart-required.json),
-[build failed](../contract/v1/apply-build-failed.json),
-[followed](../contract/v1/apply-follow.jsonl).
+Examples: [built](v1/apply-restart-required.json),
+[build failed](v1/apply-build-failed.json), [followed](v1/apply-follow.jsonl).
 
 ## `lmx apply cancel -g GENERATION`
 
@@ -242,7 +240,7 @@ fail the command.
 | `disk` | `DiskLow`, when `lmxd` reports it |
 | `dotfiles` | Only when `limanix.toml` names dotfiles: whether their entries are linked into the home of the development account. A `warning` names the paths in the way; `failed` means the directory is not mounted or cannot be read |
 
-Example: [doctor](../contract/v1/doctor.json).
+Example: [doctor](v1/doctor.json).
 
 ## `lmx net check PORT`
 
@@ -259,14 +257,14 @@ records as in `lmx doctor`, with the same exit status.
 Without a listener there is no `process` check. The VM's address and a
 connection from the Mac belong to `limanix net check` on the host.
 
-Example: [net check](../contract/v1/net-check.json).
+Example: [net check](v1/net-check.json).
 
 ## `lmx version`
 
 `data` has `version`, the release version of the binary, and `contract`, the
 contract version it speaks.
 
-Example: [version](../contract/v1/version.json).
+Example: [version](v1/version.json).
 
 ## Change the host contract
 

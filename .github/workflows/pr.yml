@@ -24,18 +24,8 @@ jobs:
         with:
           task: ci/markdown/fmt
 
-  docs:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: mr-chelyshkin/actions/task-run@v2
-        with:
-          task: docs/prepare
-
   rust:
-    needs: [markdown, docs]
+    needs: [markdown]
     uses: mr-chelyshkin/actions/.github/workflows/ci-rust.yml@v2
     permissions:
       contents: read
@@ -74,7 +64,7 @@ jobs:
 
   gate:
     if: always()
-    needs: [markdown, docs, rust, release]
+    needs: [markdown, rust, release]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
