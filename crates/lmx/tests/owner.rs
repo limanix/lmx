@@ -36,7 +36,13 @@ case $(/bin/cat "$root/build" 2>/dev/null) in
   fail) echo "error: builder for 'system.drv' failed" >&2; exit 1 ;;
   hang) exec /bin/sleep 60 ;;
 esac
-/bin/cp "$root/mnt/limanix/flake/runtime.json" "$root/nix/var/nix/profiles/system/etc/lmx/config.json"
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = --flake ]; then flake=$2; break; fi
+  shift
+done
+flake=${flake#path:}
+flake=${flake%#runtime}
+/bin/cp "$flake/runtime.json" "$root/nix/var/nix/profiles/system/etc/lmx/config.json"
 "#;
 
 /// Fake `nix-env`: logs its call; `--delete-generations old` removes the first generation link.
@@ -240,13 +246,16 @@ impl Guest {
 
     fn mount(&self, desired: &str, built: &str, booted: &str, kept: usize) {
         let marker = |generation: &str| json!({"generation": generation}).to_string();
-        self.write("mnt/limanix/flake/runtime.json", &marker(desired));
         self.write(
-            "mnt/limanix/environment",
+            &format!("mnt/limanix/{desired}/flake/runtime.json"),
+            &marker(desired),
+        );
+        self.write(
+            &format!("mnt/limanix/{desired}/environment"),
             "HTTP_PROXY=\"http://proxy:3128\"\n",
         );
         self.write(
-            "mnt/limanix/environment.sh",
+            &format!("mnt/limanix/{desired}/environment.sh"),
             "export HTTP_PROXY=\"http://proxy:3128\"\n",
         );
         self.write(
@@ -262,6 +271,17 @@ impl Guest {
         }
         self.write("run/booted-system/etc/lmx/config.json", &marker(booted));
         self.write("proc/self/mountinfo", MOUNTINFO);
+        self.select(desired);
+    }
+
+    fn select(&self, generation: &str) {
+        std::os::unix::fs::symlink(generation, self.path("mnt/limanix/current.new"))
+            .expect("select the generation");
+        fs::rename(
+            self.path("mnt/limanix/current.new"),
+            self.path("mnt/limanix/current"),
+        )
+        .expect("publish the selection");
     }
 
     fn wait_for_call(&self, prefix: &str) {
@@ -401,9 +421,14 @@ fn status_includes_the_owner_when_lmxd_runs() {
 }
 
 #[test]
-fn an_apply_installs_the_environment_and_builds_for_the_next_boot() {
+fn an_apply_builds_with_the_candidate_environment_then_installs_it() {
     let guest = Guest::new(usage(50), usage(50));
     guest.mount("g2", "g1", "g1", 1);
+    guest.select("g1");
+    guest.write(
+        "etc/limanix/environment",
+        "HTTP_PROXY=\"http://old:3128\"\n",
+    );
     let output = guest
         .lmx(&["apply", "-g", "g2", "--follow", "--json"])
         .output()
@@ -421,7 +446,7 @@ fn an_apply_installs_the_environment_and_builds_for_the_next_boot() {
         .filter(|event| event["event"] == "phase")
         .map(|event| &event["phase"])
         .collect();
-    assert_eq!(phases, ["environment", "reserve", "build"]);
+    assert_eq!(phases, ["reserve", "build", "environment"]);
     for (stream, line) in [
         ("stderr", "building the system configuration..."),
         ("stdout", "HTTP_PROXY=http://proxy:3128"),
@@ -444,6 +469,7 @@ fn an_apply_installs_the_environment_and_builds_for_the_next_boot() {
         .output()
         .expect("run lmx");
     assert_eq!(answer(&again)["data"]["state"], "restart_required");
+    guest.select("g2");
     let status = guest.lmx(&["status", "--json"]).output().expect("run lmx");
     assert_eq!(
         answer(&status)["data"]["owner"]["conditions"][0]["type"],
@@ -456,7 +482,7 @@ fn an_apply_installs_the_environment_and_builds_for_the_next_boot() {
     assert_eq!(other.status.code(), Some(1), "{other:?}");
     assert_eq!(
         answer(&other)["error"]["details"],
-        json!({"requested": "g3", "mounted": "g2"})
+        json!({"requested": "g3", "mounted": null})
     );
 }
 
@@ -464,6 +490,8 @@ fn an_apply_installs_the_environment_and_builds_for_the_next_boot() {
 fn a_failed_build_reports_its_exit_status() {
     let guest = Guest::new(usage(50), usage(50));
     guest.mount("g2", "g1", "g1", 1);
+    guest.write("etc/limanix/environment", "OLD=\"1\"\n");
+    guest.write("etc/limanix/environment.sh", "export OLD=\"1\"\n");
     guest.write("build", "fail");
     let output = guest
         .lmx(&["apply", "-g", "g2", "--follow", "--json"])
@@ -480,6 +508,16 @@ fn a_failed_build_reports_its_exit_status() {
         "stream": "stderr",
         "line": "error: builder for 'system.drv' failed"
     })));
+    assert_eq!(
+        fs::read_to_string(guest.path("etc/limanix/environment")).expect("old environment"),
+        "OLD=\"1\"\n"
+    );
+    assert_eq!(
+        fs::read_to_string(guest.path("etc/limanix/environment.sh"))
+            .expect("old shell environment"),
+        "export OLD=\"1\"\n"
+    );
+    assert!(!lines.contains(&json!({"event": "phase", "phase": "environment"})));
 }
 
 #[test]

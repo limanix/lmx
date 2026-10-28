@@ -79,7 +79,7 @@ and its reason is listed in `problems`.
 
 | Field | Meaning |
 | -- | -- |
-| `generations` | `desired` (mounted at `/mnt/limanix`), `built` (system profile), `booted` (running system) |
+| `generations` | `desired` (selected at `/mnt/limanix/current`), `built` (system profile), `booted` (running system) |
 | `disk` | `bytes`, `free_bytes` (including the root reserve), `available_bytes`, `inodes`, `free_inodes` |
 | `interfaces` | `name`, lowercase `mac` (`null` without a hardware address), and global-scope `ipv4` addresses of each interface |
 | `failed_units` | Names of failed systemd units |
@@ -93,14 +93,14 @@ still answered. Its conditions are computed when it is asked:
 
 | Condition | When |
 | -- | -- |
-| `OutOfDate` | The mounted generation is not built: an apply is needed |
-| `RestartRequired` | The mounted generation is built but not booted: a restart is needed |
-| `Degraded` | The mounted generation is booted and failed its last health check; the message gives the reason |
-| `Converged` | The mounted generation is booted, healthy and finalized: older generations and their boot entries are gone |
-| `FinalizeFailed` | The mounted generation is booted and passed its last health check, but its finalize failed: removing the older generations or rewriting their boot entries; the message gives the reason, and `lmxd` tries again later |
+| `OutOfDate` | The selected generation is not built: an apply is needed |
+| `RestartRequired` | The selected generation is built but not booted: a restart is needed |
+| `Degraded` | The selected generation is booted and failed its last health check; the message gives the reason |
+| `Converged` | The selected generation is booted, healthy and finalized: older generations and their boot entries are gone |
+| `FinalizeFailed` | The selected generation is booted and passed its last health check, but its finalize failed: removing the older generations or rewriting their boot entries; the message gives the reason, and `lmxd` tries again later |
 | `DiskLow` | Less than the platform minimum of the store disk is free |
 
-Without a mounted generation there is no generation condition. A booted
+Without a selected generation there is no generation condition. A booted
 generation that is healthy and still keeps older generations has none either:
 `lmxd` is about to remove them, and a `SystemFinalize` operation shows it. When
 the finalize fails, the generation is `FinalizeFailed` until a later try
@@ -118,10 +118,10 @@ Examples: [complete](v1/status.json), [partial](v1/status-partial.json).
 
 ## `lmx store reserve`
 
-Root only. The host runs it before it stops a running VM for an update. `lmxd`
-collects unreferenced store paths when less than the collect threshold (20%) of
-the store disk is free, and waits for the collection; a collection already
-running is shared. Interrupting the command does not stop the collection.
+Root only. The host runs it before building an update. `lmxd` collects
+unreferenced store paths when less than the collect threshold (20%) of the store
+disk is free, and waits for the collection; a collection already running is
+shared. Interrupting the command does not stop the collection.
 
 `data` has `before` and `after`, store disk usage objects as in `lmx status`,
 `freed_bytes`, and `collected`.
@@ -162,12 +162,27 @@ Example: [finalize failed](v1/wait-finalize-failed.json).
 
 ## `lmx apply -g GENERATION`
 
-Root only. The host runs it after it mounts a generation at `/mnt/limanix`.
-`lmxd` installs the generation's environment files into `/etc/limanix`, makes
-room in the store as `lmx store reserve` does, and builds the generation for the
-next boot with `nixos-rebuild boot`. The apply belongs to `lmxd`: interrupting
-the command does not stop it, and running the command again attaches to the
-running apply. An apply of another generation is cancelled and replaced.
+Root only. The host mounts its `generations/` directory at `/mnt/limanix`. The
+requested generation supplies `flake/runtime.json`, `environment` and
+`environment.sh` under `/mnt/limanix/GENERATION/`. `GENERATION` must match that
+directory's marker. After a successful apply, the host atomically replaces the
+relative `current` symlink to select the generation reported by status.
+
+`lmxd` checks both environment files, makes room in the store as
+`lmx store reserve` does, then builds the generation for the next boot with
+`nixos-rebuild boot`. The build receives its environment directly from the
+requested generation's inputs. Only after a successful build does `lmxd` install
+the environment files into `/etc/limanix`. A failed or cancelled build leaves
+the installed environment unchanged. Once the build succeeds, environment
+installation completes even if cancellation was requested meanwhile. If
+installation fails after the build, applying the same generation again retries
+the installation without rebuilding it. The system profile and boot entries may
+already have changed at that point; apply is not an atomic transaction across
+the boot loader and environment files.
+
+The apply belongs to `lmxd`: interrupting the command does not stop it, and
+running the command again attaches to the running apply. An apply of another
+generation is cancelled and replaced.
 
 Without `--follow`, the answer comes at once. `data` has `generation` and
 `state`: `running`, or `restart_required` when the generation is built.
@@ -177,7 +192,7 @@ Lines: one line per event, and the envelope last.
 
 | `event` | Fields |
 | -- | -- |
-| `phase` | `phase`: `environment`, `reserve` or `build` |
+| `phase` | `phase`: `reserve`, `build`, then `environment` |
 | `output` | `stream` (`stdout` or `stderr`) and `line`, a line of the build; `truncated: true` when the line was cut |
 | `warning` | `code` and `message` of a problem that does not stop the apply, such as `disk.low` from the reserve |
 | `lagged` | `skipped`: the follower fell behind and missed that many events |
@@ -188,7 +203,7 @@ restart the VM to boot the generation.
 
 | Error code | When |
 | -- | -- |
-| `generation.mismatch` | `GENERATION` is not the mounted generation; `details` has `requested` and `mounted` (`null` without a mount) |
+| `generation.mismatch` | The candidate directory's marker does not match `GENERATION`; `details` has `requested` and `mounted` (the candidate marker, or `null` without one) |
 | `apply.environment_failed` | The environment files cannot be installed |
 | `apply.build_failed` | `nixos-rebuild` failed; `details` has `exit_code` when it exited, and `disk` with the store disk usage when the disk is full |
 | `apply.cancelled` | `lmx apply cancel`, an apply of another generation, or a cancel through the Task API stopped the apply; exit status `130` |
@@ -204,9 +219,10 @@ Examples: [built](v1/apply-restart-required.json),
 ## `lmx apply cancel -g GENERATION`
 
 Root only. The host runs it when the person stops an update. `lmxd` cancels the
-apply of `GENERATION` and answers once it has stopped; its followers receive
-`apply.cancelled`. A build is killed; a boot loader update that `nixos-rebuild`
-started finishes in its own unit.
+apply of `GENERATION` and answers once it has stopped. A cancelled build ends
+its followers with `apply.cancelled`; a build that already succeeded finishes
+installing its environment and reports success. A running build is killed; a
+boot loader update that `nixos-rebuild` started finishes in its own unit.
 
 `data` has `cancelled`: `true` when an apply of the generation was running,
 `false` when none was.

@@ -31,7 +31,7 @@ pub struct Status {
 /// Generation identifiers of the three stages of an update.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Generations {
-    /// Generation mounted at `/mnt/limanix`.
+    /// Generation selected by the host at `/mnt/limanix/current`.
     pub desired: Option<String>,
     /// Generation of the current system profile.
     pub built: Option<String>,

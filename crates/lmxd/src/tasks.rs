@@ -215,9 +215,9 @@ impl Process {
 }
 
 /// The process that runs a task of `kind` with `spec`.
-fn process(kind: Kind, spec: &Value, setup: &Setup) -> Process {
+fn process(kind: Kind, spec: &Value, setup: &Setup) -> Result<Process, RunnerError> {
     let tools = &setup.tools;
-    match kind {
+    Ok(match kind {
         Kind::StoreCollect => {
             let collect = [tools.nix_store.clone(), "--gc".into(), "--quiet".into()];
             if spec.get("priority").and_then(Value::as_str) == Some(Priority::Idle.as_str()) {
@@ -241,18 +241,19 @@ fn process(kind: Kind, spec: &Value, setup: &Setup) -> Process {
             ],
         ),
         Kind::SystemApply => {
+            let inputs = apply_inputs(spec, setup)?;
             let mut process = Process::new(
                 tools.nixos_rebuild.clone(),
                 vec![
                     "boot".into(),
                     "--flake".into(),
-                    setup.paths.flake(),
+                    format!("path:{}#runtime", inputs.join("flake").display()),
                     "--no-write-lock-file".into(),
                     "--no-update-lock-file".into(),
                 ],
             );
             process.env.push(("PATH".into(), SYSTEM_PATH.into()));
-            if let Ok(text) = fs::read_to_string(setup.paths.environment().join("environment")) {
+            if let Ok(text) = fs::read_to_string(inputs.join("environment")) {
                 process.env.extend(environment::variables(&text));
             }
             process
@@ -281,7 +282,21 @@ fn process(kind: Kind, spec: &Value, setup: &Setup) -> Process {
                 tools.systemd_run.clone(),
             ],
         )),
-    }
+    })
+}
+
+/// Resolves a `SystemApply` task's generation without accepting caller-supplied paths.
+fn apply_inputs(spec: &Value, setup: &Setup) -> Result<std::path::PathBuf, RunnerError> {
+    let generation = spec
+        .get("generation")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let (inputs, _) = setup.paths.candidate(generation).map_err(|_| {
+        RunnerError::InvalidSpec(format!(
+            "SystemApply generation {generation:?} does not match its input marker"
+        ))
+    })?;
+    Ok(inputs)
 }
 
 /// `process` with the system tools in its `PATH`, which `switch-to-configuration` and the account's
@@ -327,7 +342,7 @@ impl Runner for LmxRunner {
         };
         let kind = Kind::from_name(workload.kind())
             .ok_or_else(|| RunnerError::InvalidSpec(format!("unknown kind {}", workload.kind())))?;
-        let Process { program, args, env } = process(kind, workload.spec(), &self.setup);
+        let Process { program, args, env } = process(kind, workload.spec(), &self.setup)?;
         let mut task_env = TaskEnv::new();
         for (name, value) in env {
             task_env.push(name, value);
@@ -434,7 +449,8 @@ mod tests {
             Kind::StoreCollect,
             &json!({"priority": "normal"}),
             &setup(Path::new("/")),
-        );
+        )
+        .expect("valid process");
         assert_eq!(process.program, "/nix/bin/nix-store");
         assert_eq!(process.args, ["--gc", "--quiet"]);
     }
@@ -445,7 +461,8 @@ mod tests {
             Kind::StoreCollect,
             &json!({"priority": "idle"}),
             &setup(Path::new("/")),
-        );
+        )
+        .expect("valid process");
         assert_eq!(process.program, "/bin/nice");
         assert_eq!(
             process.args,
@@ -464,7 +481,8 @@ mod tests {
 
     #[test]
     fn lists_roots_through_the_configured_tools() {
-        let process = process(Kind::StoreRoots, &json!({}), &setup(Path::new("/")));
+        let process =
+            process(Kind::StoreRoots, &json!({}), &setup(Path::new("/"))).expect("valid process");
         assert_eq!(process.program, "/bin/sh");
         assert_eq!(
             process.args[..2],
@@ -477,16 +495,23 @@ mod tests {
     fn builds_the_mounted_flake_with_the_users_environment() {
         let root = tempfile::tempdir().expect("temporary root");
         let setup = setup(root.path());
-        fs::create_dir_all(setup.paths.environment()).expect("create /etc/limanix");
+        let inputs = setup.paths.generation("g1").expect("valid generation");
+        fs::create_dir_all(inputs.join("flake")).expect("create the generation mount");
+        fs::write(inputs.join("flake/runtime.json"), r#"{"generation":"g1"}"#)
+            .expect("write marker");
         fs::write(
-            setup.paths.environment().join("environment"),
+            inputs.join("environment"),
             "HTTP_PROXY=\"http://proxy:3128\"\nPATH=\"/opt/bin\"\n",
         )
         .expect("write the environment");
 
-        let process = process(Kind::SystemApply, &json!({"generation": "g1"}), &setup);
+        let process = process(Kind::SystemApply, &json!({"generation": "g1"}), &setup)
+            .expect("valid process");
         assert_eq!(process.program, "/bin/nixos-rebuild");
-        let flake = format!("path:{}/mnt/limanix/flake#runtime", root.path().display());
+        let flake = format!(
+            "path:{}/mnt/limanix/g1/flake#runtime",
+            root.path().display()
+        );
         assert_eq!(
             process.args,
             [
@@ -509,7 +534,8 @@ mod tests {
 
     #[test]
     fn checks_health_with_the_units_and_the_account() {
-        let process = process(Kind::SystemHealth, &json!({}), &setup(Path::new("/")));
+        let process =
+            process(Kind::SystemHealth, &json!({}), &setup(Path::new("/"))).expect("valid process");
         assert_eq!(process.program, "/bin/sh");
         assert_eq!(
             process.args[2..],
@@ -527,7 +553,8 @@ mod tests {
 
     #[test]
     fn finalizes_the_system_profile() {
-        let process = process(Kind::SystemFinalize, &json!({}), &setup(Path::new("/")));
+        let process = process(Kind::SystemFinalize, &json!({}), &setup(Path::new("/")))
+            .expect("valid process");
         assert_eq!(process.args[1], FINALIZE_SCRIPT);
         assert_eq!(
             process.args[2..],

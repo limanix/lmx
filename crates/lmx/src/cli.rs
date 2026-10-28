@@ -44,7 +44,7 @@ pub(crate) enum Command {
     /// Keep room in the Nix store; the work runs in lmxd.
     #[command(subcommand)]
     Store(StoreCommand),
-    /// Build the generation the host mounted for the next boot; the work runs in lmxd.
+    /// Build a requested generation for the next boot; the work runs in lmxd.
     Apply(ApplyArgs),
     /// Use the Mac clipboard through the terminal; also installed as pbcopy and pbpaste.
     #[command(subcommand)]
@@ -97,7 +97,7 @@ pub(crate) struct ApplyArgs {
     /// Another apply operation.
     #[command(subcommand)]
     pub(crate) command: Option<ApplyCommand>,
-    /// Generation to apply; it must be the one the host mounted.
+    /// Generation to apply from its directory under the host's mounted generations.
     #[arg(short, long, required = true)]
     pub(crate) generation: Option<String>,
     /// Follow the apply until it ends, with the build's output.

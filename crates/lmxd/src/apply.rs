@@ -1,12 +1,13 @@
-//! The apply operation: building the mounted generation for the next boot.
+//! The apply operation: building a requested generation for the next boot.
 //!
-//! The host mounts a generation's inputs at `/mnt/limanix` and asks for it by name. An apply then
-//! installs the generation's environment files, makes room in the store, and runs `nixos-rebuild
-//! boot` as a `SystemApply` task. The apply belongs to `lmxd`: a caller that disconnects only stops
+//! The host provides inputs at `/mnt/limanix/<generation>` and asks for them by generation. An apply
+//! makes room in the store, runs `nixos-rebuild boot` as a `SystemApply` task, then installs the
+//! generation's environment. The apply belongs to `lmxd`: a caller that disconnects only stops
 //! following it, and asking again attaches to the running one. Its state lives in memory; after a
 //! reboot the generation markers tell what was built.
 
 use std::{
+    path::{Path, PathBuf},
     sync::{
         Arc, Mutex as SyncMutex, PoisonError,
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -75,8 +76,9 @@ struct Progress {
 pub(crate) struct Run {
     /// The generation being applied.
     generation: String,
-    /// Name of the run and of its build task, such as `system-apply-3`; the journal records of the
-    /// run carry it, also when it fails before the build.
+    /// Immutable input directory of the accepted generation.
+    inputs: PathBuf,
+    /// Name of the run and of its build task.
     name: String,
     /// Followers and outcome.
     progress: SyncMutex<Progress>,
@@ -88,9 +90,10 @@ pub(crate) struct Run {
 
 impl Run {
     /// A run of `generation` named `name`, without followers.
-    fn new(generation: &str, name: String) -> Self {
+    fn new(generation: &str, name: String, inputs: PathBuf) -> Self {
         Self {
             generation: generation.to_owned(),
+            inputs,
             name,
             progress: SyncMutex::new(Progress {
                 messages: broadcast::channel(BACKLOG).0,
@@ -149,30 +152,22 @@ impl Run {
 /// What an apply request does.
 #[derive(Debug)]
 enum Decision<'a> {
-    /// The requested generation is not the mounted one.
-    Mismatch,
     /// An apply of the requested generation runs: attach to it.
     Join(&'a Arc<Run>),
     /// An apply of another generation runs: stop it, then decide again.
     Replace(&'a Arc<Run>),
-    /// The requested generation is built: only a restart is needed.
+    /// The requested generation is built: install its environment before answering.
     Built,
     /// Start an apply.
     Start,
 }
 
 /// What a request for `requested` does, given the generation markers and the running apply.
-///
-/// A running apply of another generation is replaced even when the requested one is built: the host
-/// mounted another generation, and the older build must not finish after the answer.
 fn decide<'a>(
     requested: &str,
     generations: &Generations,
     running: Option<&'a Arc<Run>>,
 ) -> Decision<'a> {
-    if generations.desired.as_deref() != Some(requested) {
-        return Decision::Mismatch;
-    }
     match running {
         Some(run) if run.generation == requested => Decision::Join(run),
         Some(run) => Decision::Replace(run),
@@ -224,24 +219,28 @@ impl Applier {
 
     /// Starts the apply of `generation`, joins the running one, or answers at once.
     ///
-    /// A generation other than the mounted one is a mismatch. A built one needs only a restart. An
-    /// apply of another generation is cancelled first, and the decision made again once it stopped.
+    /// The candidate directory must have the requested generation's marker. A built generation
+    /// retries environment installation without another build. An apply of another generation is
+    /// cancelled first, and the decision made again once it stopped.
     pub(crate) async fn apply(self: &Arc<Self>, generation: &str) -> Result<Joined, ErrorBody> {
         let mut current = self.current.lock().await;
         loop {
-            let (generations, _) = lmx_facts::generations::read(&self.paths.generations());
+            let (inputs, generations) = self
+                .paths
+                .candidate(generation)
+                .map_err(|found| mismatch(generation, found.as_deref()))?;
             let running = current.clone().filter(|run| run.running());
             match decide(generation, &generations, running.as_ref()) {
-                Decision::Mismatch => {
-                    return Err(mismatch(generation, generations.desired.as_deref()));
-                }
                 Decision::Join(run) => return Ok(run.join()),
                 Decision::Replace(run) => self.stop(run).await,
-                Decision::Built => return Ok(Joined::Done(Ok(restart_required(generation)))),
+                Decision::Built => {
+                    self.install_environment(&inputs)?;
+                    return Ok(Joined::Done(Ok(restart_required(generation))));
+                }
                 Decision::Start => {
                     let number = self.created.fetch_add(1, Ordering::Relaxed) + 1;
                     let name = format!("{}-{number}", Kind::SystemApply.task_prefix());
-                    let run = Arc::new(Run::new(generation, name));
+                    let run = Arc::new(Run::new(generation, name, inputs));
                     let joined = run.join();
                     *current = Some(Arc::clone(&run));
                     tokio::spawn(Arc::clone(self).drive(run));
@@ -339,18 +338,10 @@ impl Applier {
         run.finish(outcome);
     }
 
-    /// Environment, reserve and build, stopping between them when cancelled.
+    /// Reserve and build, then finish installing the environment after a successful build.
     async fn steps(&self, run: &Run) -> Result<Apply, ErrorBody> {
-        run.event(ApplyEvent::Phase {
-            phase: ApplyPhase::Environment,
-        });
-        environment::install(&self.paths, self.gid).map_err(|error| {
-            failure(
-                ErrorCode::ApplyEnvironmentFailed,
-                format!("The environment files cannot be installed: {error}"),
-            )
-        })?;
         stop_if_cancelled(run)?;
+        environment::validate(&run.inputs).map_err(environment_failed)?;
 
         run.event(ApplyEvent::Phase {
             phase: ApplyPhase::Reserve,
@@ -372,15 +363,21 @@ impl Applier {
         run.event(ApplyEvent::Phase {
             phase: ApplyPhase::Build,
         });
-        self.build(run).await
+        let built = self.build(run).await?;
+        run.event(ApplyEvent::Phase {
+            phase: ApplyPhase::Environment,
+        });
+        self.install_environment(&run.inputs)?;
+        Ok(built)
+    }
+
+    /// Installs the environment after a successful build, including a retry of a built generation.
+    fn install_environment(&self, inputs: &Path) -> Result<(), ErrorBody> {
+        environment::install(&self.paths, inputs, self.gid).map_err(environment_failed)
     }
 
     /// Runs `nixos-rebuild boot` and passes its output to the followers.
     async fn build(&self, run: &Run) -> Result<Apply, ErrorBody> {
-        let (generations, _) = lmx_facts::generations::read(&self.paths.generations());
-        if generations.desired.as_deref() != Some(run.generation.as_str()) {
-            return Err(mismatch(&run.generation, generations.desired.as_deref()));
-        }
         let name = run.name.as_str();
         let mut lines = self.capture.listen(name);
         let placement = Placement {
@@ -467,12 +464,20 @@ fn failure(code: ErrorCode, message: String) -> ErrorBody {
     }
 }
 
-/// The failure of an apply for a generation that is not the mounted one.
+/// An environment file could not be read, staged or installed.
+fn environment_failed(error: std::io::Error) -> ErrorBody {
+    failure(
+        ErrorCode::ApplyEnvironmentFailed,
+        format!("The environment files cannot be installed: {error}"),
+    )
+}
+
+/// The failure of an apply whose candidate marker does not match the requested generation.
 fn mismatch(requested: &str, mounted: Option<&str>) -> ErrorBody {
     let mut error = failure(
         ErrorCode::GenerationMismatch,
         format!(
-            "Generation {requested} is not the one mounted at /mnt/limanix ({}).",
+            "Generation {requested} does not match the marker at /mnt/limanix/{requested} ({}).",
             mounted.unwrap_or("none")
         ),
     );
@@ -521,19 +526,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn decides_between_mismatch_join_replace_built_and_start() {
+    fn decides_between_join_replace_built_and_start() {
         let generations = |desired: &str, built: &str| Generations {
             desired: Some(desired.to_owned()),
             built: Some(built.to_owned()),
             booted: Some("g0".to_owned()),
         };
-        let g1 = Arc::new(Run::new("g1", "system-apply-1".into()));
-        let g2 = Arc::new(Run::new("g2", "system-apply-2".into()));
-        let mounted_g2 = generations("g2", "g1");
-        assert!(matches!(
-            decide("g3", &mounted_g2, None),
-            Decision::Mismatch
+        let g1 = Arc::new(Run::new(
+            "g1",
+            "system-apply-1".into(),
+            "/mnt/limanix/g1".into(),
         ));
+        let g2 = Arc::new(Run::new(
+            "g2",
+            "system-apply-2".into(),
+            "/mnt/limanix/g2".into(),
+        ));
+        let mounted_g2 = generations("g2", "g1");
+        assert!(matches!(decide("g3", &mounted_g2, None), Decision::Start));
         assert!(matches!(
             decide("g2", &mounted_g2, Some(&g2)),
             Decision::Join(_)
@@ -584,7 +594,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_follower_that_joins_first_sees_every_message() {
-        let run = Run::new("g1", "system-apply-1".into());
+        let run = Run::new("g1", "system-apply-1".into(), "/mnt/limanix/g1".into());
         let Joined::Following(mut messages) = run.join() else {
             panic!("a new run has no outcome");
         };
