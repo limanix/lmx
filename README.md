@@ -9,15 +9,17 @@
 
 <p align="center">
   <a href="https://docs.limanix.dev"><b>Docs</b></a>
-  &nbsp;·&nbsp;
+  &nbsp;|&nbsp;
   <a href="https://docs.limanix.dev/inside/lmx"><b>Using lmx</b></a>
-  &nbsp;·&nbsp;
+  &nbsp;|&nbsp;
   <a href="https://docs.limanix.dev/reference/lmx"><b>Command reference</b></a>
-  &nbsp;·&nbsp;
+  &nbsp;|&nbsp;
   <a href="https://docs.limanix.dev/architecture"><b>How it works</b></a>
-  &nbsp;·&nbsp;
+  &nbsp;|&nbsp;
   <a href="https://github.com/limanix/lmx/releases"><b>Releases</b></a>
 </p>
+
+<hr>
 
 The guest side of [LimaNix](https://limanix.dev), which runs NixOS development
 VMs on a Mac. [`limanix`](https://github.com/limanix/client) creates and updates
