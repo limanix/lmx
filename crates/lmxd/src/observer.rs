@@ -365,7 +365,7 @@ pub(crate) fn conditions(
     if generations.built.as_deref() != Some(desired) {
         return vec![condition(
             OUT_OF_DATE,
-            format!("Generation {desired} is mounted but not built; apply it."),
+            format!("Generation {desired} is selected but not built; apply it."),
         )];
     }
     if generations.booted.as_deref() != Some(desired) {

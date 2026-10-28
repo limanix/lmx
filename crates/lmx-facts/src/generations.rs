@@ -4,7 +4,7 @@
 //!
 //! | Stage   | Marker                                             | Written by               |
 //! |---------|----------------------------------------------------|--------------------------|
-//! | desired | `/mnt/limanix/flake/runtime.json`                  | the host, per generation |
+//! | desired | `/mnt/limanix/current/flake/runtime.json`          | the host, per generation |
 //! | built   | `/nix/var/nix/profiles/system/etc/lmx/config.json` | NixOS, at build          |
 //! | booted  | `/run/booted-system/etc/lmx/config.json`           | NixOS, at build          |
 //!
@@ -31,7 +31,7 @@ const MAX_LENGTH: usize = 64;
 /// Locations of the three generation markers.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GenerationPaths {
-    /// Marker of the generation mounted by the host.
+    /// Marker of the generation selected by the host's relative `current` symlink.
     pub desired: PathBuf,
     /// Marker of the current system profile.
     pub built: PathBuf,
@@ -48,7 +48,7 @@ impl GenerationPaths {
     /// Marker locations below `root`, for tests.
     pub fn under(root: &Path) -> Self {
         Self {
-            desired: root.join("mnt/limanix/flake/runtime.json"),
+            desired: root.join("mnt/limanix/current/flake/runtime.json"),
             built: root.join("nix/var/nix/profiles/system/etc/lmx/config.json"),
             booted: root.join("run/booted-system/etc/lmx/config.json"),
         }
@@ -89,12 +89,16 @@ fn marker(what: &'static str, path: &Path) -> Result<Option<String>, FactError> 
     let Ok(Marker { generation }) = serde_json::from_slice(&data) else {
         return Ok(None);
     };
-    let valid = !generation.is_empty()
+    Ok(valid_identifier(&generation).then_some(generation))
+}
+
+/// Whether a generation is a short lowercase identifier, safe as one path component.
+pub fn valid_identifier(generation: &str) -> bool {
+    !generation.is_empty()
         && generation.len() <= MAX_LENGTH
         && generation
             .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit());
-    Ok(valid.then_some(generation))
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
 }
 
 /// Directory holding the system profile and its generation links.

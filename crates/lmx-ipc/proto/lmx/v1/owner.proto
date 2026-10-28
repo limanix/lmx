@@ -100,7 +100,7 @@ message ReserveResponse {
 
 // Input of `Apply`.
 message ApplyRequest {
-  // Generation to apply; it must be the one mounted at `/mnt/limanix`.
+  // Generation to apply from `/mnt/limanix/<generation>`; its marker must match.
   string generation = 1;
   // Whether to stream the progress; without it the answer comes once the apply runs.
   bool follow = 2;

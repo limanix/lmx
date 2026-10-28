@@ -6,6 +6,7 @@ use lmx_facts::{
     generations::{GenerationPaths, PROFILES_PATH},
     mounts::MOUNTINFO_PATH,
 };
+use lmx_model::Generations;
 
 /// Guest locations below a system root: `/` in a guest, a prepared tree in tests.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,14 +26,27 @@ impl Paths {
         self.root.join(path.trim_start_matches('/'))
     }
 
-    /// Inputs of the mounted generation.
-    pub(crate) fn mount(&self) -> PathBuf {
-        self.at("/mnt/limanix")
+    /// Inputs of one validated generation, independent of the mutable `current` selection.
+    pub(crate) fn generation(&self, generation: &str) -> Option<PathBuf> {
+        lmx_facts::generations::valid_identifier(generation)
+            .then(|| self.at("/mnt/limanix").join(generation))
     }
 
-    /// Flake reference of the mounted generation's system.
-    pub(crate) fn flake(&self) -> String {
-        format!("path:{}#runtime", self.mount().join("flake").display())
+    /// Inputs of `generation` with the generation markers, `desired` read from those inputs. A name
+    /// that is not an identifier, or inputs of another generation, give the marker found instead.
+    pub(crate) fn candidate(
+        &self,
+        generation: &str,
+    ) -> Result<(PathBuf, Generations), Option<String>> {
+        let inputs = self.generation(generation).ok_or(None)?;
+        let mut paths = self.generations();
+        paths.desired = inputs.join("flake/runtime.json");
+        let (generations, _) = lmx_facts::generations::read(&paths);
+        if generations.desired.as_deref() == Some(generation) {
+            Ok((inputs, generations))
+        } else {
+            Err(generations.desired)
+        }
     }
 
     /// Directory of the installed environment files.

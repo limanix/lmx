@@ -1,7 +1,7 @@
 //! Environment files of a generation.
 //!
 //! The host writes the user's `[env]` into two files next to the generation's flake, which keeps
-//! the values out of the flake and the Nix store. Before a build they are installed into
+//! the values out of the flake and the Nix store. After a successful build they are installed into
 //! `/etc/limanix`, where every service reads `environment` through a systemd drop-in and login
 //! shells source `environment.sh`. Only root and the development account's group may read them.
 
@@ -9,6 +9,7 @@ use std::{
     fs::{self, OpenOptions, Permissions},
     io::{self, Write},
     os::unix::fs::{OpenOptionsExt, PermissionsExt, chown},
+    path::Path,
 };
 
 use crate::paths::Paths;
@@ -19,16 +20,29 @@ const FILES: [&str; 2] = ["environment", "environment.sh"];
 /// Mode of the installed files: root writes, the group reads.
 const FILE_MODE: u32 = 0o640;
 
+/// Reads both candidate files without changing the running system.
+fn contents(inputs: &Path) -> io::Result<Vec<(&'static str, Vec<u8>)>> {
+    FILES
+        .into_iter()
+        .map(|name| fs::read(inputs.join(name)).map(|content| (name, content)))
+        .collect()
+}
+
+/// Checks both candidate files before starting a build, without installing them.
+pub(crate) fn validate(inputs: &Path) -> io::Result<()> {
+    contents(inputs).map(|_| ())
+}
+
 /// Installs the generation's environment files into `/etc/limanix`.
 ///
 /// The directory gets mode `0755`. Each file is written beside its target with mode `0640` and the
 /// group `gid`, then renamed over it; a reader never sees half a file.
-pub(crate) fn install(paths: &Paths, gid: u32) -> io::Result<()> {
+pub(crate) fn install(paths: &Paths, inputs: &Path, gid: u32) -> io::Result<()> {
+    let files = contents(inputs)?;
     let directory = paths.environment();
     fs::create_dir_all(&directory)?;
     fs::set_permissions(&directory, Permissions::from_mode(0o755))?;
-    for name in FILES {
-        let content = fs::read(paths.mount().join(name))?;
+    for (name, content) in files {
         let staged = directory.join(format!(".{name}.new"));
         let mut file = OpenOptions::new()
             .write(true)
@@ -40,12 +54,14 @@ pub(crate) fn install(paths: &Paths, gid: u32) -> io::Result<()> {
         file.sync_all()?;
         fs::set_permissions(&staged, Permissions::from_mode(FILE_MODE))?;
         chown(&staged, None, Some(gid))?;
-        fs::rename(&staged, directory.join(name))?;
+    }
+    for name in FILES {
+        fs::rename(directory.join(format!(".{name}.new")), directory.join(name))?;
     }
     Ok(())
 }
 
-/// Variables of an installed `environment` file, in file order.
+/// Variables of a generation's `environment` file, in file order.
 ///
 /// The host writes one `NAME="value"` assignment per variable, escaping `\`, `"`, `$` and the
 /// backtick with a backslash; a value may span lines. Anything else ends the parse, keeping the
@@ -102,12 +118,13 @@ mod tests {
     fn installs_the_files_for_root_and_the_group_only() {
         let root = tempfile::tempdir().expect("temporary root");
         let paths = Paths::new(root.path().to_path_buf());
-        fs::create_dir_all(paths.mount()).expect("create the mount");
-        fs::write(paths.mount().join("environment"), "A=\"1\"\n").expect("write");
-        fs::write(paths.mount().join("environment.sh"), "export A=\"1\"\n").expect("write");
+        let inputs = paths.generation("g1").expect("valid generation");
+        fs::create_dir_all(&inputs).expect("create the mount");
+        fs::write(inputs.join("environment"), "A=\"1\"\n").expect("write");
+        fs::write(inputs.join("environment.sh"), "export A=\"1\"\n").expect("write");
         let gid = fs::metadata(root.path()).expect("metadata").gid();
 
-        install(&paths, gid).expect("install");
+        install(&paths, &inputs, gid).expect("install");
         for name in FILES {
             let installed = paths.environment().join(name);
             let metadata = fs::metadata(&installed).expect("installed");

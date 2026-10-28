@@ -104,7 +104,7 @@ impl Guest {
         };
         guest.write("nix/store/.keep", "");
         guest.write(
-            "mnt/limanix/flake/runtime.json",
+            "mnt/limanix/current/flake/runtime.json",
             r#"{"generation": "0123456789ab"}"#,
         );
         guest.write(
@@ -365,7 +365,10 @@ fn status_json_answers_the_host_contract() {
 #[test]
 fn status_reports_missing_facts_without_failing() {
     let guest = Guest::new();
-    let marker = guest.root.path().join("mnt/limanix/flake/runtime.json");
+    let marker = guest
+        .root
+        .path()
+        .join("mnt/limanix/current/flake/runtime.json");
     fs::remove_file(&marker).expect("remove the desired marker");
     fs::create_dir(&marker).expect("a directory is a marker that cannot be read");
     let missing = guest.root.path().join("missing.json");

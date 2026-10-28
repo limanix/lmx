@@ -133,7 +133,7 @@ fn from_markers(markers: &Generations, error: Option<&FactError>) -> Check {
             return Check::new(
                 "generations",
                 CheckStatus::Unknown,
-                "The mounted generation is readable only by root.",
+                "The selected generation is readable only by root.",
             )
             .hint("Run sudo lmx doctor.");
         }
@@ -146,7 +146,7 @@ fn from_markers(markers: &Generations, error: Option<&FactError>) -> Check {
         (Some(desired), built, _) if built.as_ref() != Some(desired) => Check::new(
             "generations",
             CheckStatus::Warning,
-            format!("Generation {desired} is mounted but not built; apply it."),
+            format!("Generation {desired} is selected but not built; apply it."),
         )
         .hint("The host builds it: run limanix update on the Mac."),
         (Some(desired), _, booted) if booted.as_ref() != Some(desired) => Check::new(
