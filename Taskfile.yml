@@ -64,6 +64,13 @@ tasks:
         vars:
           FMT_ARGS: '{{.markdown_paths}}'
 
+  reference/fix:
+    desc: Update reference.json from the commands of lmx
+    cmds:
+      - task: rust:exec
+        vars:
+          CMD: env LMX_UPDATE_REFERENCE=1 cargo test --locked -p lmx reference
+
   release/build:
     desc: Build binary
     requires:

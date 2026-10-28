@@ -1,0 +1,432 @@
+{
+  "commands": [
+    {
+      "name": "lmx",
+      "about": "Guest owner command of a LimaNix VM",
+      "details": null,
+      "args": [],
+      "checks": []
+    },
+    {
+      "name": "lmx help",
+      "about": "Show the workspace and its commands, or what a module gives you",
+      "details": null,
+      "args": [
+        {
+          "name": "TOPIC",
+          "short": null,
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Module to explain, such as `python`, `python-3.12` or `lmx:python-3.12`",
+          "details": null
+        }
+      ],
+      "checks": []
+    },
+    {
+      "name": "lmx info",
+      "about": "Show the kernel, guest disk, shared folders and failed units",
+      "details": null,
+      "args": [],
+      "checks": []
+    },
+    {
+      "name": "lmx welcome",
+      "about": "Show the workspace welcome again",
+      "details": null,
+      "args": [],
+      "checks": []
+    },
+    {
+      "name": "lmx status",
+      "about": "Show generations, disk usage, network interfaces and failed units",
+      "details": null,
+      "args": [
+        {
+          "name": "--short",
+          "short": null,
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Print only what needs attention, such as `restart`, for tmux and the prompt",
+          "details": null
+        },
+        {
+          "name": "--wait",
+          "short": null,
+          "value": "WAIT",
+          "required": false,
+          "default": null,
+          "values": [
+            {
+              "name": "converged",
+              "about": "The generation is booted, healthy and finalized"
+            }
+          ],
+          "about": "Wait until the guest reaches this state, then answer; the host waits so after a restart. A failed finalize of the generation answers at once",
+          "details": null
+        },
+        {
+          "name": "--generation",
+          "short": "-g",
+          "value": "GENERATION",
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Generation the wait is for",
+          "details": null
+        },
+        {
+          "name": "--timeout",
+          "short": null,
+          "value": "TIMEOUT",
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Longest wait, such as 90s, 10m or 1h [default: 10m]",
+          "details": null
+        },
+        {
+          "name": "--json",
+          "short": null,
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Answer with the JSON host contract instead of text",
+          "details": null
+        }
+      ],
+      "checks": []
+    },
+    {
+      "name": "lmx doctor",
+      "about": "Diagnose the configuration, lmxd and the generations, with what to do next",
+      "details": null,
+      "args": [
+        {
+          "name": "--json",
+          "short": null,
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Answer with the JSON host contract instead of text",
+          "details": null
+        }
+      ],
+      "checks": [
+        {
+          "id": "config",
+          "what": "`/etc/lmx/config.json` is readable and valid"
+        },
+        {
+          "id": "owner",
+          "what": "`lmxd` answers, with the same version as `lmx`"
+        },
+        {
+          "id": "generations",
+          "what": "The state of the generations, from `lmxd` or, without it, from the generation markers"
+        },
+        {
+          "id": "disk",
+          "what": "Shown when `lmxd` reports that the disk is low"
+        },
+        {
+          "id": "dotfiles",
+          "what": "Shown when `limanix.toml` names dotfiles: their entries are linked into the home. A `warning` names the paths in the way; `failed` means the directory is not mounted or cannot be read"
+        }
+      ]
+    },
+    {
+      "name": "lmx net",
+      "about": "Check the network inside this VM",
+      "details": null,
+      "args": [],
+      "checks": []
+    },
+    {
+      "name": "lmx net check",
+      "about": "Check why a port of this VM may be unreachable from the Mac: firewall, listener and process",
+      "details": null,
+      "args": [
+        {
+          "name": "PORT",
+          "short": null,
+          "value": null,
+          "required": true,
+          "default": null,
+          "values": [],
+          "about": "Port to check",
+          "details": null
+        },
+        {
+          "name": "--udp",
+          "short": null,
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Check a UDP port instead of a TCP one",
+          "details": null
+        },
+        {
+          "name": "--json",
+          "short": null,
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Answer with the JSON host contract instead of text",
+          "details": null
+        }
+      ],
+      "checks": [
+        {
+          "id": "firewall",
+          "what": "The guest firewall opens the port for its protocol. TCP port 22 is always open for SSH"
+        },
+        {
+          "id": "listener",
+          "what": "Something listens on the port, and not only on a loopback address"
+        },
+        {
+          "id": "process",
+          "what": "Which process holds the socket, and which user created it. Only when something listens. Docker's proxy is a warning: `network.ports` does not control the ports Docker publishes"
+        }
+      ]
+    },
+    {
+      "name": "lmx logs",
+      "about": "Show the output of the latest lmxd task of a kind, from the journal",
+      "details": null,
+      "args": [
+        {
+          "name": "KIND",
+          "short": null,
+          "value": null,
+          "required": true,
+          "default": null,
+          "values": [
+            {
+              "name": "apply",
+              "about": "Builds of a mounted generation"
+            },
+            {
+              "name": "health",
+              "about": "Health checks of the booted generation"
+            },
+            {
+              "name": "finalize",
+              "about": "Removals of older generations after a healthy boot"
+            },
+            {
+              "name": "collect",
+              "about": "Collections of unreferenced store paths"
+            },
+            {
+              "name": "roots",
+              "about": "Reports of the garbage-collector roots"
+            }
+          ],
+          "about": "Kind of lmxd task",
+          "details": null
+        },
+        {
+          "name": "--previous",
+          "short": null,
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Read the boot before the running one, such as the one that built the running generation",
+          "details": null
+        }
+      ],
+      "checks": []
+    },
+    {
+      "name": "lmx version",
+      "about": "Show the lmx version and the host contract it speaks",
+      "details": null,
+      "args": [
+        {
+          "name": "--json",
+          "short": null,
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Answer with the JSON host contract instead of text",
+          "details": null
+        }
+      ],
+      "checks": []
+    },
+    {
+      "name": "lmx store",
+      "about": "Keep room in the Nix store; the work runs in lmxd",
+      "details": null,
+      "args": [],
+      "checks": []
+    },
+    {
+      "name": "lmx store reserve",
+      "about": "Collect unreferenced store paths when free space is low; the host runs it before it stops the VM",
+      "details": null,
+      "args": [
+        {
+          "name": "--json",
+          "short": null,
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Answer with the JSON host contract instead of text",
+          "details": null
+        }
+      ],
+      "checks": []
+    },
+    {
+      "name": "lmx apply",
+      "about": "Build a requested generation for the next boot; the work runs in lmxd",
+      "details": null,
+      "args": [
+        {
+          "name": "--generation",
+          "short": "-g",
+          "value": "GENERATION",
+          "required": true,
+          "default": null,
+          "values": [],
+          "about": "Generation to apply from its directory under the host's mounted generations",
+          "details": null
+        },
+        {
+          "name": "--follow",
+          "short": null,
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Follow the apply until it ends, with the build's output",
+          "details": null
+        },
+        {
+          "name": "--json",
+          "short": null,
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Answer with the JSON host contract instead of text",
+          "details": null
+        }
+      ],
+      "checks": []
+    },
+    {
+      "name": "lmx apply cancel",
+      "about": "Cancel the apply of a generation and wait until it stops",
+      "details": null,
+      "args": [
+        {
+          "name": "--generation",
+          "short": "-g",
+          "value": "GENERATION",
+          "required": true,
+          "default": null,
+          "values": [],
+          "about": "Generation whose apply to cancel",
+          "details": null
+        },
+        {
+          "name": "--json",
+          "short": null,
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Answer with the JSON host contract instead of text",
+          "details": null
+        }
+      ],
+      "checks": []
+    },
+    {
+      "name": "lmx clipboard",
+      "about": "Use the Mac clipboard through the terminal; also installed as pbcopy and pbpaste",
+      "details": null,
+      "args": [],
+      "checks": []
+    },
+    {
+      "name": "lmx clipboard copy",
+      "about": "Copy standard input to the Mac clipboard",
+      "details": null,
+      "args": [],
+      "checks": []
+    },
+    {
+      "name": "lmx clipboard paste",
+      "about": "Print the Mac clipboard, if the terminal allows reads",
+      "details": null,
+      "args": [],
+      "checks": []
+    },
+    {
+      "name": "lmx session",
+      "about": "Open a named session with the selected provider; also installed as limanix-session",
+      "details": null,
+      "args": [
+        {
+          "name": "NAME",
+          "short": null,
+          "value": null,
+          "required": true,
+          "default": null,
+          "values": [],
+          "about": "Session name, passed to the provider unchanged; put -- before a name that starts with -",
+          "details": null
+        }
+      ],
+      "checks": []
+    },
+    {
+      "name": "lmx dotfiles",
+      "about": "Show which of your dotfiles from the Mac are linked into your home, or link them",
+      "details": null,
+      "args": [],
+      "checks": []
+    },
+    {
+      "name": "lmx dotfiles status",
+      "about": "Show the linked entries, the conflicts and the missing links without changing anything",
+      "details": null,
+      "args": [],
+      "checks": []
+    },
+    {
+      "name": "lmx dotfiles link",
+      "about": "Link the dotfiles into your home; every shell of yours does it as it starts",
+      "details": null,
+      "args": [
+        {
+          "name": "--quiet",
+          "short": null,
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Print nothing but errors, as a starting shell runs it",
+          "details": null
+        }
+      ],
+      "checks": []
+    }
+  ]
+}

@@ -13,6 +13,7 @@ use lmx_facts::{
 use lmx_model::{Check, CheckStatus, Envelope, NetCheck, Ports, Protocol};
 
 use crate::{
+    checks::CheckId,
     findings, output,
     palette::{Paint, Palette},
     system::System,
@@ -74,8 +75,7 @@ fn checks(system: &System, port: u16, protocol: Protocol) -> Vec<Check> {
 fn firewall(ports: Result<&Ports, String>, port: u16, protocol: Protocol, docker: bool) -> Check {
     let name = protocol.name();
     if docker {
-        return Check::new(
-            "firewall",
+        return CheckId::Firewall.finding(
             CheckStatus::Ok,
             format!(
                 "Docker publishes {name} {port} with its own rules, outside the guest firewall."
@@ -85,12 +85,12 @@ fn firewall(ports: Result<&Ports, String>, port: u16, protocol: Protocol, docker
     let ports = match ports {
         Ok(ports) => ports,
         Err(error) => {
-            return Check::new(
-                "firewall",
-                CheckStatus::Failed,
-                format!("The declared ports cannot be read: {error}"),
-            )
-            .hint("Run lmx doctor.");
+            return CheckId::Firewall
+                .finding(
+                    CheckStatus::Failed,
+                    format!("The declared ports cannot be read: {error}"),
+                )
+                .hint("Run lmx doctor.");
         }
     };
     let (open, other, other_name) = match protocol {
@@ -102,31 +102,26 @@ fn firewall(ports: Result<&Ports, String>, port: u16, protocol: Protocol, docker
         name.to_lowercase()
     );
     if protocol == Protocol::Tcp && port == 22 {
-        Check::new(
-            "firewall",
-            CheckStatus::Ok,
-            "TCP 22 is always open for SSH.",
-        )
+        CheckId::Firewall.finding(CheckStatus::Ok, "TCP 22 is always open for SSH.")
     } else if open.contains(&port) {
-        Check::new(
-            "firewall",
+        CheckId::Firewall.finding(
             CheckStatus::Ok,
             format!("{name} {port} is open in the guest firewall."),
         )
     } else if other.contains(&port) {
-        Check::new(
-            "firewall",
-            CheckStatus::Failed,
-            format!("Only {other_name} {port} is open in the guest firewall, not {name}."),
-        )
-        .hint(declare)
+        CheckId::Firewall
+            .finding(
+                CheckStatus::Failed,
+                format!("Only {other_name} {port} is open in the guest firewall, not {name}."),
+            )
+            .hint(declare)
     } else {
-        Check::new(
-            "firewall",
-            CheckStatus::Failed,
-            format!("{name} {port} is not open in the guest firewall."),
-        )
-        .hint(declare)
+        CheckId::Firewall
+            .finding(
+                CheckStatus::Failed,
+                format!("{name} {port} is not open in the guest firewall."),
+            )
+            .hint(declare)
     }
 }
 
@@ -136,16 +131,16 @@ fn listener(listeners: &Result<Vec<Listener>, FactError>, port: u16, protocol: P
     let listeners = match listeners {
         Ok(listeners) => listeners,
         Err(error) => {
-            return Check::new("listener", CheckStatus::Failed, error.to_string());
+            return CheckId::Listener.finding(CheckStatus::Failed, error.to_string());
         }
     };
     if listeners.is_empty() {
-        return Check::new(
-            "listener",
-            CheckStatus::Failed,
-            format!("Nothing listens on {name} {port} in the guest."),
-        )
-        .hint("Start the application, and check the port it uses.");
+        return CheckId::Listener
+            .finding(
+                CheckStatus::Failed,
+                format!("Nothing listens on {name} {port} in the guest."),
+            )
+            .hint("Start the application, and check the port it uses.");
     }
     let addresses: BTreeSet<IpAddr> = listeners
         .iter()
@@ -157,17 +152,16 @@ fn listener(listeners: &Result<Vec<Listener>, FactError>, port: u16, protocol: P
         .collect::<Vec<_>>()
         .join(" and ");
     if addresses.iter().all(IpAddr::is_loopback) {
-        Check::new(
-            "listener",
-            CheckStatus::Failed,
-            format!(
-                "{name} {port} listens on {shown} only and is reachable only inside the guest."
-            ),
-        )
-        .hint("Make the application listen on 0.0.0.0 or the guest address.")
+        CheckId::Listener
+            .finding(
+                CheckStatus::Failed,
+                format!(
+                    "{name} {port} listens on {shown} only and is reachable only inside the guest."
+                ),
+            )
+            .hint("Make the application listen on 0.0.0.0 or the guest address.")
     } else {
-        Check::new(
-            "listener",
+        CheckId::Listener.finding(
             CheckStatus::Ok,
             format!("{name} {port} listens on {shown}."),
         )
@@ -205,8 +199,7 @@ fn process(
 ) -> Check {
     let Some((first, uid)) = holders.first() else {
         if complete {
-            return Check::new(
-                "process",
+            return CheckId::Process.finding(
                 CheckStatus::Ok,
                 "No process holds the socket; the kernel does.",
             );
@@ -216,14 +209,11 @@ fn process(
         } else {
             ""
         };
-        return Check::new(
-            "process",
-            CheckStatus::Unknown,
-            "No visible process holds the socket.",
-        )
-        .hint(format!(
-            "Run sudo lmx net check {port}{udp} to see processes of other users."
-        ));
+        return CheckId::Process
+            .finding(CheckStatus::Unknown, "No visible process holds the socket.")
+            .hint(format!(
+                "Run sudo lmx net check {port}{udp} to see processes of other users."
+            ));
     };
     let more = match holders.len() {
         1 => String::new(),
@@ -235,21 +225,17 @@ fn process(
         .iter()
         .any(|(holder, _)| holder.command == DOCKER_PROXY)
     {
-        Check::new(
-            "process",
-            CheckStatus::Warning,
-            format!("Docker publishes {} {port}: {owner}.", protocol.name()),
-        )
-        .hint(
-            "network.ports does not control ports that Docker publishes, and removing the port \
+        CheckId::Process
+            .finding(
+                CheckStatus::Warning,
+                format!("Docker publishes {} {port}: {owner}.", protocol.name()),
+            )
+            .hint(
+                "network.ports does not control ports that Docker publishes, and removing the port \
              from it does not close them.",
-        )
+            )
     } else {
-        Check::new(
-            "process",
-            CheckStatus::Ok,
-            format!("{owner} holds {socket}."),
-        )
+        CheckId::Process.finding(CheckStatus::Ok, format!("{owner} holds {socket}."))
     }
 }
 

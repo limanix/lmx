@@ -48,6 +48,7 @@ use lmx_facts::{FactError, mounts};
 use lmx_model::{Check, CheckStatus, Config};
 
 use crate::{
+    checks::CheckId,
     output,
     palette::{Color, Paint, Palette},
     system::System,
@@ -677,7 +678,7 @@ fn finding(dotfiles: &Path, survey: &Result<Plan, ReadError>) -> Check {
     let plan = match survey {
         Ok(plan) => plan,
         Err(error) => {
-            let check = Check::new("dotfiles", CheckStatus::Failed, error.to_string());
+            let check = CheckId::Dotfiles.finding(CheckStatus::Failed, error.to_string());
             return match error {
                 ReadError::NotAbsolute(_) => {
                     check.hint("The platform renders it; limanix update on the Mac restores it.")
@@ -701,15 +702,15 @@ fn finding(dotfiles: &Path, survey: &Result<Plan, ReadError>) -> Check {
         } else {
             ("are", "them")
         };
-        return Check::new(
-            "dotfiles",
-            CheckStatus::Warning,
-            format!(
-                "{} {verb} in the way of the dotfiles from {dotfiles}.",
-                listing(&paths)
-            ),
-        )
-        .hint(format!("Move {them} aside, then open a new shell."));
+        return CheckId::Dotfiles
+            .finding(
+                CheckStatus::Warning,
+                format!(
+                    "{} {verb} in the way of the dotfiles from {dotfiles}.",
+                    listing(&paths)
+                ),
+            )
+            .hint(format!("Move {them} aside, then open a new shell."));
     }
     let linked = plan.linked.len();
     let missing = plan
@@ -726,7 +727,7 @@ fn finding(dotfiles: &Path, survey: &Result<Plan, ReadError>) -> Check {
         (_, 0) => format!("{counted}."),
         _ => format!("{counted}; the next shell links {missing} more."),
     };
-    Check::new("dotfiles", CheckStatus::Ok, message)
+    CheckId::Dotfiles.finding(CheckStatus::Ok, message)
 }
 
 /// A line of a path in the home: the word in `color`, the path, then `detail`.

@@ -12,6 +12,7 @@ use lmx_model::{
 };
 
 use crate::{
+    checks::CheckId,
     cli::OutputArgs,
     dotfiles, findings, output,
     owner::{self, CallError},
@@ -41,12 +42,12 @@ pub(crate) fn run(system: &System, args: &OutputArgs) -> io::Result<ExitCode> {
 /// Whether the configuration is readable and valid.
 fn config(system: &System) -> Check {
     match &system.config {
-        Ok(config) => Check::new(
-            "config",
+        Ok(config) => CheckId::Config.finding(
             CheckStatus::Ok,
             format!("{CONFIG_PATH} is valid; generation {}.", config.generation),
         ),
-        Err(message) => Check::new("config", CheckStatus::Failed, message.clone())
+        Err(message) => CheckId::Config
+            .finding(CheckStatus::Failed, message.clone())
             .hint("The platform renders it; limanix update on the Mac restores it."),
     }
 }
@@ -55,18 +56,18 @@ fn config(system: &System) -> Check {
 fn owner_check(answer: &Result<Owner, CallError>) -> Check {
     let version = env!("CARGO_PKG_VERSION");
     match answer {
-        Ok(owner) if owner.version == version => Check::new(
-            "owner",
-            CheckStatus::Ok,
-            format!("lmxd {} answers.", owner.version),
-        ),
-        Ok(owner) => Check::new(
-            "owner",
-            CheckStatus::Warning,
-            format!("lmxd {} answers, but lmx is {version}.", owner.version),
-        )
-        .hint("Restart the VM so both come from the booted generation."),
-        Err(error) => Check::new("owner", CheckStatus::Failed, error.to_string()).hint(OWNER_HINT),
+        Ok(owner) if owner.version == version => {
+            CheckId::Owner.finding(CheckStatus::Ok, format!("lmxd {} answers.", owner.version))
+        }
+        Ok(owner) => CheckId::Owner
+            .finding(
+                CheckStatus::Warning,
+                format!("lmxd {} answers, but lmx is {version}.", owner.version),
+            )
+            .hint("Restart the VM so both come from the booted generation."),
+        Err(error) => CheckId::Owner
+            .finding(CheckStatus::Failed, error.to_string())
+            .hint(OWNER_HINT),
     }
 }
 
@@ -92,14 +93,17 @@ fn conditions(
         .iter()
         .any(|operation| operation.kind == "SystemApply");
     let generation = if let Some(message) = holds(DEGRADED) {
-        Check::new("generations", CheckStatus::Failed, message).hint(
+        CheckId::Generations.finding(CheckStatus::Failed, message).hint(
             "See sudo lmx logs health, and the unit the reason names with systemctl status; lmxd \
              checks again every minute.",
         )
     } else if let Some(message) = holds(FINALIZE_FAILED) {
-        Check::new("generations", CheckStatus::Warning, message).hint("See sudo lmx logs finalize.")
+        CheckId::Generations
+            .finding(CheckStatus::Warning, message)
+            .hint("See sudo lmx logs finalize.")
     } else if let Some(message) = holds(RESTART_REQUIRED) {
-        Check::new("generations", CheckStatus::Warning, message)
+        CheckId::Generations
+            .finding(CheckStatus::Warning, message)
             .hint("Restart the VM from the Mac; limanix update does it.")
     } else if let Some(message) = holds(OUT_OF_DATE) {
         let hint = if applying {
@@ -107,16 +111,19 @@ fn conditions(
         } else {
             "The host builds it: run limanix update on the Mac."
         };
-        Check::new("generations", CheckStatus::Warning, message).hint(hint)
+        CheckId::Generations
+            .finding(CheckStatus::Warning, message)
+            .hint(hint)
     } else if let Some(message) = holds(CONVERGED) {
-        Check::new("generations", CheckStatus::Ok, message)
+        CheckId::Generations.finding(CheckStatus::Ok, message)
     } else {
         settled(markers)
     };
     let mut checks = vec![generation];
     if let Some(message) = holds(DISK_LOW) {
         checks.push(
-            Check::new("disk", CheckStatus::Warning, message)
+            CheckId::Disk
+                .finding(CheckStatus::Warning, message)
                 .hint("Free space with sudo lmx store reserve."),
         );
     }
@@ -130,31 +137,31 @@ fn conditions(
 fn from_markers(markers: &Generations, error: Option<&FactError>) -> Check {
     match error {
         Some(FactError::Io { source, .. }) if source.kind() == io::ErrorKind::PermissionDenied => {
-            return Check::new(
-                "generations",
-                CheckStatus::Unknown,
-                "The selected generation is readable only by root.",
-            )
-            .hint("Run sudo lmx doctor.");
+            return CheckId::Generations
+                .finding(
+                    CheckStatus::Unknown,
+                    "The selected generation is readable only by root.",
+                )
+                .hint("Run sudo lmx doctor.");
         }
         Some(error) => {
-            return Check::new("generations", CheckStatus::Failed, error.to_string());
+            return CheckId::Generations.finding(CheckStatus::Failed, error.to_string());
         }
         None => {}
     }
     match (&markers.desired, &markers.built, &markers.booted) {
-        (Some(desired), built, _) if built.as_ref() != Some(desired) => Check::new(
-            "generations",
-            CheckStatus::Warning,
-            format!("Generation {desired} is selected but not built; apply it."),
-        )
-        .hint("The host builds it: run limanix update on the Mac."),
-        (Some(desired), _, booted) if booted.as_ref() != Some(desired) => Check::new(
-            "generations",
-            CheckStatus::Warning,
-            format!("Generation {desired} is built; restart the VM to boot it."),
-        )
-        .hint("Restart the VM from the Mac; limanix update does it."),
+        (Some(desired), built, _) if built.as_ref() != Some(desired) => CheckId::Generations
+            .finding(
+                CheckStatus::Warning,
+                format!("Generation {desired} is selected but not built; apply it."),
+            )
+            .hint("The host builds it: run limanix update on the Mac."),
+        (Some(desired), _, booted) if booted.as_ref() != Some(desired) => CheckId::Generations
+            .finding(
+                CheckStatus::Warning,
+                format!("Generation {desired} is built; restart the VM to boot it."),
+            )
+            .hint("Restart the VM from the Mac; limanix update does it."),
         _ => settled(markers),
     }
 }
@@ -162,13 +169,10 @@ fn from_markers(markers: &Generations, error: Option<&FactError>) -> Check {
 /// A generation without a condition: booted and finalizing, or a system without markers.
 fn settled(markers: &Generations) -> Check {
     match &markers.booted {
-        Some(booted) => Check::new(
-            "generations",
-            CheckStatus::Ok,
-            format!("Generation {booted} is booted."),
-        ),
-        None => Check::new(
-            "generations",
+        Some(booted) => {
+            CheckId::Generations.finding(CheckStatus::Ok, format!("Generation {booted} is booted."))
+        }
+        None => CheckId::Generations.finding(
             CheckStatus::Ok,
             "The system has no generation markers; it was built before lmx.",
         ),
