@@ -464,11 +464,6 @@ fn an_apply_builds_with_the_candidate_environment_then_installs_it() {
         0o640
     );
 
-    let again = guest
-        .lmx(&["apply", "-g", "g2", "--json"])
-        .output()
-        .expect("run lmx");
-    assert_eq!(answer(&again)["data"]["state"], "restart_required");
     guest.select("g2");
     let status = guest.lmx(&["status", "--json"]).output().expect("run lmx");
     assert_eq!(

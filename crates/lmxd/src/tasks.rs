@@ -291,12 +291,11 @@ fn apply_inputs(spec: &Value, setup: &Setup) -> Result<std::path::PathBuf, Runne
         .get("generation")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let (inputs, _) = setup.paths.candidate(generation).map_err(|_| {
+    setup.paths.candidate(generation).map_err(|_| {
         RunnerError::InvalidSpec(format!(
             "SystemApply generation {generation:?} does not match its input marker"
         ))
-    })?;
-    Ok(inputs)
+    })
 }
 
 /// `process` with the system tools in its `PATH`, which `switch-to-configuration` and the account's
