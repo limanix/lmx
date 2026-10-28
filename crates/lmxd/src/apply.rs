@@ -17,7 +17,7 @@ use std::{
 
 use lmx_model::{
     Apply, ApplyEvent, ApplyPhase, ApplyState, BuildFailure, CancelApply, ErrorBody, ErrorCode,
-    Generations, OutputStream,
+    OutputStream,
 };
 use serde_json::{Map, Value};
 use solti::{
@@ -156,22 +156,15 @@ enum Decision<'a> {
     Join(&'a Arc<Run>),
     /// An apply of another generation runs: stop it, then decide again.
     Replace(&'a Arc<Run>),
-    /// The requested generation is built: install its environment before answering.
-    Built,
     /// Start an apply.
     Start,
 }
 
-/// What a request for `requested` does, given the generation markers and the running apply.
-fn decide<'a>(
-    requested: &str,
-    generations: &Generations,
-    running: Option<&'a Arc<Run>>,
-) -> Decision<'a> {
+/// What a request for `requested` does, given the running apply.
+fn decide<'a>(requested: &str, running: Option<&'a Arc<Run>>) -> Decision<'a> {
     match running {
         Some(run) if run.generation == requested => Decision::Join(run),
         Some(run) => Decision::Replace(run),
-        None if generations.built.as_deref() == Some(requested) => Decision::Built,
         None => Decision::Start,
     }
 }
@@ -217,26 +210,21 @@ impl Applier {
         }
     }
 
-    /// Starts the apply of `generation`, joins the running one, or answers at once.
+    /// Starts the apply of `generation`, or joins the running one.
     ///
-    /// The candidate directory must have the requested generation's marker. A built generation
-    /// retries environment installation without another build. An apply of another generation is
-    /// cancelled first, and the decision made again once it stopped.
+    /// The candidate directory must have the requested generation's marker. An apply of another
+    /// generation is cancelled first, and the decision made again once it stopped.
     pub(crate) async fn apply(self: &Arc<Self>, generation: &str) -> Result<Joined, ErrorBody> {
         let mut current = self.current.lock().await;
         loop {
-            let (inputs, generations) = self
+            let inputs = self
                 .paths
                 .candidate(generation)
                 .map_err(|found| mismatch(generation, found.as_deref()))?;
             let running = current.clone().filter(|run| run.running());
-            match decide(generation, &generations, running.as_ref()) {
+            match decide(generation, running.as_ref()) {
                 Decision::Join(run) => return Ok(run.join()),
                 Decision::Replace(run) => self.stop(run).await,
-                Decision::Built => {
-                    self.install_environment(&inputs)?;
-                    return Ok(Joined::Done(Ok(restart_required(generation))));
-                }
                 Decision::Start => {
                     let number = self.created.fetch_add(1, Ordering::Relaxed) + 1;
                     let name = format!("{}-{number}", Kind::SystemApply.task_prefix());
@@ -526,12 +514,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn decides_between_join_replace_built_and_start() {
-        let generations = |desired: &str, built: &str| Generations {
-            desired: Some(desired.to_owned()),
-            built: Some(built.to_owned()),
-            booted: Some("g0".to_owned()),
-        };
+    fn decides_between_join_replace_and_start() {
         let g1 = Arc::new(Run::new(
             "g1",
             "system-apply-1".into(),
@@ -542,28 +525,9 @@ mod tests {
             "system-apply-2".into(),
             "/mnt/limanix/g2".into(),
         ));
-        let mounted_g2 = generations("g2", "g1");
-        assert!(matches!(decide("g3", &mounted_g2, None), Decision::Start));
-        assert!(matches!(
-            decide("g2", &mounted_g2, Some(&g2)),
-            Decision::Join(_)
-        ));
-        assert!(matches!(
-            decide("g2", &mounted_g2, Some(&g1)),
-            Decision::Replace(_)
-        ));
-        assert!(matches!(decide("g2", &mounted_g2, None), Decision::Start));
-        assert!(matches!(
-            decide("g2", &generations("g2", "g2"), None),
-            Decision::Built
-        ));
-        assert!(
-            matches!(
-                decide("g1", &generations("g1", "g1"), Some(&g2)),
-                Decision::Replace(_)
-            ),
-            "a build of another generation never outlives the answer"
-        );
+        assert!(matches!(decide("g2", None), Decision::Start));
+        assert!(matches!(decide("g2", Some(&g2)), Decision::Join(_)));
+        assert!(matches!(decide("g2", Some(&g1)), Decision::Replace(_)));
     }
 
     #[test]

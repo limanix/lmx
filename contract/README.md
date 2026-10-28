@@ -175,17 +175,19 @@ requested generation's inputs. Only after a successful build does `lmxd` install
 the environment files into `/etc/limanix`. A failed or cancelled build leaves
 the installed environment unchanged. Once the build succeeds, environment
 installation completes even if cancellation was requested meanwhile. If
-installation fails after the build, applying the same generation again retries
-the installation without rebuilding it. The system profile and boot entries may
-already have changed at that point; apply is not an atomic transaction across
-the boot loader and environment files.
+installation fails after the build, the system profile and boot entries may
+already have changed; apply is not an atomic transaction across the boot loader
+and environment files. Applying a generation that is already built runs
+`nixos-rebuild boot` again: it reuses the built system and writes the boot
+entries again.
 
 The apply belongs to `lmxd`: interrupting the command does not stop it, and
 running the command again attaches to the running apply. An apply of another
 generation is cancelled and replaced.
 
 Without `--follow`, the answer comes at once. `data` has `generation` and
-`state`: `running`, or `restart_required` when the generation is built.
+`state`: `running`, or `restart_required` when the apply it joined has already
+succeeded.
 
 With `--follow`, the command waits for the outcome. `--json` then writes JSON
 Lines: one line per event, and the envelope last.

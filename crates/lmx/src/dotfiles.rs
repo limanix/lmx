@@ -21,8 +21,8 @@
 //! | links elsewhere inside the dotfiles                  | points it to its entry         |
 //! | links outside the dotfiles, or is a file or a folder | leaves it, as a conflict       |
 //!
-//! A link in the home or in `~/.config` that points into the dotfiles at an entry that is gone is
-//! removed; nothing else is ever removed. While the dotfiles are not a shared folder of the mount
+//! A link in the home or in `~/.config` to the same name in the dotfiles is removed when that name
+//! is gone; nothing else is ever removed. While the dotfiles are not a shared folder of the mount
 //! table, nothing is linked or removed: the empty mount point that a failed mount leaves would
 //! make every link look stale. A change on the Mac is live in the guest at once: `lmx` manages only
 //! the links. Every interactive shell of the account runs `lmx dotfiles link --quiet`
@@ -505,24 +505,19 @@ impl Plan {
         }
     }
 
-    /// Adds the removal of `target` when it is a link into the dotfiles at a path that is gone.
+    /// Adds the removal of `target` when it links to the same name in the dotfiles and that name
+    /// is gone.
     fn stale(&mut self, dotfiles: &Path, listing: &Listing, target: PathBuf, found: &Kind) {
         let Kind::Link(to) = found else {
             return;
         };
-        let Some(inner) = inside(to, dotfiles) else {
-            return;
+        let names = if target.parent() == Some(Path::new(CONFIG)) {
+            &listing.config_entries
+        } else {
+            &listing.entries
         };
-        let mut parts = inner.iter();
-        let gone = match parts.next() {
-            None => false,
-            Some(first) if !listing.entries.contains(first) => true,
-            Some(first) if first == OsStr::new(CONFIG) => parts
-                .next()
-                .is_some_and(|second| !listing.config_entries.contains(second)),
-            Some(_) => false,
-        };
-        if gone {
+        let own = inside(to, dotfiles) == Some(target.as_path());
+        if own && target.file_name().is_some_and(|name| !names.contains(name)) {
             self.changes.push(Change::Remove {
                 target,
                 gone: to.clone(),
@@ -941,11 +936,7 @@ mod tests {
         let plan = plan(Path::new(DOTFILES), &listing);
         assert_eq!(
             removed(&plan),
-            [
-                Path::new(".profile"),
-                Path::new(".vimrc"),
-                Path::new(".config/git")
-            ]
+            [Path::new(".vimrc"), Path::new(".config/git")]
         );
         assert!(plan.conflicts.is_empty(), "{plan:?}");
     }
