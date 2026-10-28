@@ -42,6 +42,7 @@ comes with `lmx`; there is nothing to install.
 | `lmx` | The command in the VM, for you and for `limanix`: the welcome, `lmx status`, `lmx doctor`, `lmx help`, dotfile links and the Mac clipboard |
 | `lmxd` | A root daemon: builds each new system, checks it after the restart, removes the old one and keeps the Nix store from filling the disk |
 | [Host contract](contract/README.md) | The versioned JSON that `limanix` reads from `lmx`, with examples in `contract/v1` |
+| [Command reference](reference.json) | The commands of `lmx` and the checks they report, built from the code for the LimaNix site; `task reference/fix` updates it |
 
 ## Development
 

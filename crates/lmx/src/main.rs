@@ -59,6 +59,7 @@
 #![forbid(unsafe_code)]
 
 mod apply;
+mod checks;
 mod cli;
 mod clipboard;
 mod doctor;
@@ -74,6 +75,8 @@ mod output;
 mod owner;
 mod palette;
 mod process;
+#[cfg(test)]
+mod reference;
 mod session;
 mod status;
 mod store;

@@ -55,7 +55,6 @@ pub(crate) enum Command {
     Dotfiles(DotfilesArgs),
 }
 
-/// Arguments of `lmx status`.
 /// Arguments of `lmx help`.
 #[derive(Debug, Args)]
 pub(crate) struct HelpArgs {
@@ -63,6 +62,7 @@ pub(crate) struct HelpArgs {
     pub(crate) topic: Option<String>,
 }
 
+/// Arguments of `lmx status`.
 #[derive(Debug, Args)]
 pub(crate) struct StatusArgs {
     /// Print only what needs attention, such as `restart`, for tmux and the prompt.
