@@ -13,7 +13,7 @@ use serde::Serialize;
 pub(crate) const FAILURE: u8 = 1;
 
 /// Exit status of a usage error.
-const USAGE: u8 = 2;
+pub(crate) const USAGE: u8 = 2;
 
 /// Exit status when the guest owner daemon `lmxd` is unavailable.
 pub(crate) const UNAVAILABLE: u8 = 3;

@@ -9,7 +9,25 @@ use clap::{Arg, ArgAction, Args, Parser, Subcommand, ValueEnum};
 
 /// Guest owner command of a LimaNix VM.
 #[derive(Debug, Parser)]
-#[command(name = "lmx", version, disable_help_subcommand = true)]
+#[command(
+    name = "lmx",
+    version,
+    override_usage = "lmx [COMMAND]",
+    disable_help_subcommand = true,
+    disable_help_flag = true,
+    disable_version_flag = true,
+    arg = Arg::new("help")
+        .short('h')
+        .long("help")
+        .action(ArgAction::Help)
+        .global(true)
+        .help("Print the guest help page, or the help of the command it follows."),
+    arg = Arg::new("version")
+        .short('V')
+        .long("version")
+        .action(ArgAction::Version)
+        .help("Print the version of lmx.")
+)]
 pub(crate) struct Cli {
     /// Command to run; without one, `lmx` prints the guest help page.
     #[command(subcommand)]
@@ -22,6 +40,7 @@ pub(crate) enum Command {
     /// Show the workspace and its commands, or what a module gives you.
     // `lmx help --help` and `lmx help -h` print the page too, as the platform's shell `lmx` did.
     #[command(
+        override_usage = "lmx help [TOPIC]",
         disable_help_flag = true,
         arg = Arg::new("help").short('h').long("help").action(ArgAction::SetTrue).hide(true)
     )]
@@ -31,27 +50,36 @@ pub(crate) enum Command {
     /// Show the workspace welcome again.
     Welcome,
     /// Show generations, disk usage, network interfaces and failed units.
+    #[command(override_usage = "lmx status [--json]
+       lmx status --short
+       lmx status --wait converged --generation GENERATION [--timeout DURATION] [--json]")]
     Status(StatusArgs),
     /// Diagnose the configuration, lmxd and the generations, with what to do next.
+    #[command(override_usage = "lmx doctor [--json]")]
     Doctor(OutputArgs),
     /// Check the network inside this VM.
     #[command(subcommand)]
     Net(NetCommand),
     /// Show the output of the latest lmxd task of a kind, from the journal.
+    #[command(override_usage = "sudo lmx logs KIND [--previous]")]
     Logs(LogsArgs),
     /// Show the lmx version and the host contract it speaks.
+    #[command(override_usage = "lmx version [--json]")]
     Version(OutputArgs),
     /// Keep room in the Nix store; the work runs in lmxd.
     #[command(subcommand)]
     Store(StoreCommand),
     /// Build a requested generation for the next boot; the work runs in lmxd.
+    #[command(override_usage = "sudo lmx apply --generation GENERATION [--follow] [--json]")]
     Apply(ApplyArgs),
     /// Use the Mac clipboard through the terminal; also installed as pbcopy and pbpaste.
     #[command(subcommand)]
     Clipboard(ClipboardCommand),
     /// Open a named session with the selected provider; also installed as limanix-session.
+    #[command(override_usage = "lmx session NAME")]
     Session(SessionArgs),
     /// Show which of your dotfiles from the Mac are linked into your home, or link them.
+    #[command(override_usage = "lmx dotfiles [status]")]
     Dotfiles(DotfilesArgs),
 }
 
@@ -112,6 +140,7 @@ pub(crate) struct ApplyArgs {
 #[derive(Debug, Subcommand)]
 pub(crate) enum ApplyCommand {
     /// Cancel the apply of a generation and wait until it stops.
+    #[command(override_usage = "sudo lmx apply cancel --generation GENERATION [--json]")]
     Cancel(CancelArgs),
 }
 
@@ -130,6 +159,7 @@ pub(crate) struct CancelArgs {
 #[derive(Debug, Subcommand)]
 pub(crate) enum NetCommand {
     /// Check why a port of this VM may be unreachable from the Mac: firewall, listener and process.
+    #[command(override_usage = "lmx net check PORT [--udp] [--json]")]
     Check(NetCheckArgs),
 }
 
@@ -202,6 +232,7 @@ impl LogKind {
 pub(crate) enum StoreCommand {
     /// Collect unreferenced store paths when free space is low;
     /// the host runs it before it stops the VM.
+    #[command(override_usage = "sudo lmx store reserve [--json]")]
     Reserve(OutputArgs),
 }
 
@@ -209,6 +240,7 @@ pub(crate) enum StoreCommand {
 #[derive(Debug, Subcommand)]
 pub(crate) enum ClipboardCommand {
     /// Copy standard input to the Mac clipboard.
+    #[command(override_usage = "lmx clipboard copy < FILE")]
     Copy,
     /// Print the Mac clipboard, if the terminal allows reads.
     Paste,
@@ -235,6 +267,7 @@ pub(crate) enum DotfilesCommand {
     /// Show the linked entries, the conflicts and the missing links without changing anything.
     Status,
     /// Link the dotfiles into your home; every shell of yours does it as it starts.
+    #[command(override_usage = "lmx dotfiles link [--quiet]")]
     Link(LinkArgs),
 }
 

@@ -52,6 +52,7 @@ mod tests {
         let shortage: Shortage =
             serde_json::from_value(error.details.into()).expect("details are a shortage");
         assert!(shortage.after.below(10));
+        assert!(shortage.collect_error.is_some());
         assert_eq!(serde_json::to_value(&envelope).expect("encode"), original);
     }
 }

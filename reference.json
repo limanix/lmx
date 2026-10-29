@@ -2,15 +2,40 @@
   "commands": [
     {
       "name": "lmx",
+      "usage": "lmx [COMMAND]",
       "about": "Guest owner command of a LimaNix VM",
       "details": null,
-      "args": [],
+      "privileges": null,
+      "args": [
+        {
+          "name": "--help",
+          "short": "-h",
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Print the guest help page, or the help of the command it follows.",
+          "details": null
+        },
+        {
+          "name": "--version",
+          "short": "-V",
+          "value": null,
+          "required": false,
+          "default": null,
+          "values": [],
+          "about": "Print the version of lmx.",
+          "details": null
+        }
+      ],
       "checks": []
     },
     {
       "name": "lmx help",
+      "usage": "lmx help [TOPIC]",
       "about": "Show the workspace and its commands, or what a module gives you",
       "details": null,
+      "privileges": null,
       "args": [
         {
           "name": "TOPIC",
@@ -27,22 +52,28 @@
     },
     {
       "name": "lmx info",
+      "usage": "lmx info",
       "about": "Show the kernel, guest disk, shared folders and failed units",
       "details": null,
+      "privileges": null,
       "args": [],
       "checks": []
     },
     {
       "name": "lmx welcome",
+      "usage": "lmx welcome",
       "about": "Show the workspace welcome again",
       "details": null,
+      "privileges": null,
       "args": [],
       "checks": []
     },
     {
       "name": "lmx status",
+      "usage": "lmx status [--json]\nlmx status --short\nlmx status --wait converged --generation GENERATION [--timeout DURATION] [--json]",
       "about": "Show generations, disk usage, network interfaces and failed units",
       "details": null,
+      "privileges": "Nothing. With `sudo` it also reads the generation the Mac selected; `--wait` needs a running `lmxd`",
       "args": [
         {
           "name": "--short",
@@ -104,8 +135,10 @@
     },
     {
       "name": "lmx doctor",
+      "usage": "lmx doctor [--json]",
       "about": "Diagnose the configuration, lmxd and the generations, with what to do next",
       "details": null,
+      "privileges": "Nothing. With `sudo` it also reads the generation the Mac selected",
       "args": [
         {
           "name": "--json",
@@ -143,15 +176,19 @@
     },
     {
       "name": "lmx net",
+      "usage": "lmx net <COMMAND>",
       "about": "Check the network inside this VM",
       "details": null,
+      "privileges": null,
       "args": [],
       "checks": []
     },
     {
       "name": "lmx net check",
+      "usage": "lmx net check PORT [--udp] [--json]",
       "about": "Check why a port of this VM may be unreachable from the Mac: firewall, listener and process",
       "details": null,
+      "privileges": "Nothing. With `sudo` it also sees the processes of other users",
       "args": [
         {
           "name": "PORT",
@@ -201,8 +238,10 @@
     },
     {
       "name": "lmx logs",
+      "usage": "sudo lmx logs KIND [--previous]",
       "about": "Show the output of the latest lmxd task of a kind, from the journal",
       "details": null,
+      "privileges": "Root, or membership in the `wheel` or `systemd-journal` group, which may read the journal of `lmxd`",
       "args": [
         {
           "name": "KIND",
@@ -250,8 +289,10 @@
     },
     {
       "name": "lmx version",
+      "usage": "lmx version [--json]",
       "about": "Show the lmx version and the host contract it speaks",
       "details": null,
+      "privileges": null,
       "args": [
         {
           "name": "--json",
@@ -268,15 +309,19 @@
     },
     {
       "name": "lmx store",
+      "usage": "lmx store <COMMAND>",
       "about": "Keep room in the Nix store; the work runs in lmxd",
       "details": null,
+      "privileges": null,
       "args": [],
       "checks": []
     },
     {
       "name": "lmx store reserve",
+      "usage": "sudo lmx store reserve [--json]",
       "about": "Collect unreferenced store paths when free space is low; the host runs it before it stops the VM",
       "details": null,
+      "privileges": "Root, with `sudo`, and a running `lmxd`",
       "args": [
         {
           "name": "--json",
@@ -293,8 +338,10 @@
     },
     {
       "name": "lmx apply",
+      "usage": "sudo lmx apply --generation GENERATION [--follow] [--json]",
       "about": "Build a requested generation for the next boot; the work runs in lmxd",
       "details": null,
+      "privileges": "Root, with `sudo`, and a running `lmxd`",
       "args": [
         {
           "name": "--generation",
@@ -331,8 +378,10 @@
     },
     {
       "name": "lmx apply cancel",
+      "usage": "sudo lmx apply cancel --generation GENERATION [--json]",
       "about": "Cancel the apply of a generation and wait until it stops",
       "details": null,
+      "privileges": "Root, with `sudo`, and a running `lmxd`",
       "args": [
         {
           "name": "--generation",
@@ -359,29 +408,37 @@
     },
     {
       "name": "lmx clipboard",
+      "usage": "lmx clipboard <COMMAND>",
       "about": "Use the Mac clipboard through the terminal; also installed as pbcopy and pbpaste",
       "details": null,
+      "privileges": null,
       "args": [],
       "checks": []
     },
     {
       "name": "lmx clipboard copy",
+      "usage": "lmx clipboard copy < FILE",
       "about": "Copy standard input to the Mac clipboard",
       "details": null,
+      "privileges": null,
       "args": [],
       "checks": []
     },
     {
       "name": "lmx clipboard paste",
+      "usage": "lmx clipboard paste",
       "about": "Print the Mac clipboard, if the terminal allows reads",
       "details": null,
+      "privileges": null,
       "args": [],
       "checks": []
     },
     {
       "name": "lmx session",
+      "usage": "lmx session NAME",
       "about": "Open a named session with the selected provider; also installed as limanix-session",
       "details": null,
+      "privileges": null,
       "args": [
         {
           "name": "NAME",
@@ -398,22 +455,28 @@
     },
     {
       "name": "lmx dotfiles",
+      "usage": "lmx dotfiles [status]",
       "about": "Show which of your dotfiles from the Mac are linked into your home, or link them",
       "details": null,
+      "privileges": null,
       "args": [],
       "checks": []
     },
     {
       "name": "lmx dotfiles status",
+      "usage": "lmx dotfiles status",
       "about": "Show the linked entries, the conflicts and the missing links without changing anything",
       "details": null,
+      "privileges": null,
       "args": [],
       "checks": []
     },
     {
       "name": "lmx dotfiles link",
+      "usage": "lmx dotfiles link [--quiet]",
       "about": "Link the dotfiles into your home; every shell of yours does it as it starts",
       "details": null,
+      "privileges": "The development account. It refuses any other user, root included",
       "args": [
         {
           "name": "--quiet",
@@ -427,6 +490,120 @@
         }
       ],
       "checks": []
+    }
+  ],
+  "exit_statuses": [
+    {
+      "status": 0,
+      "what": "Success"
+    },
+    {
+      "status": 1,
+      "what": "The command failed, or a check of `lmx doctor` or `lmx net check` failed"
+    },
+    {
+      "status": 2,
+      "what": "Usage error"
+    },
+    {
+      "status": 3,
+      "what": "`lmxd` is unavailable. Only `store reserve`, `apply`, `apply cancel` and `status --wait` need it"
+    },
+    {
+      "status": 127,
+      "what": "`lmx session` or `limanix-session` found no session provider"
+    },
+    {
+      "status": 130,
+      "what": "The apply was cancelled"
+    }
+  ],
+  "environment": [
+    {
+      "id": "NO_COLOR",
+      "what": "Set and not empty: no colors"
+    },
+    {
+      "id": "TERM",
+      "what": "Unset, empty or `dumb`: no colors"
+    }
+  ],
+  "check_statuses": [
+    {
+      "id": "ok",
+      "what": "Fine"
+    },
+    {
+      "id": "warning",
+      "what": "Worth knowing; nothing is broken"
+    },
+    {
+      "id": "failed",
+      "what": "Broken. The command exits with status `1`"
+    },
+    {
+      "id": "unknown",
+      "what": "Your account cannot read what the check needs. Run the command with `sudo`"
+    }
+  ],
+  "status_lines": [
+    {
+      "id": "Generation",
+      "what": "The generation the Mac selected (`desired`), the one built for the next boot (`built`) and the one running now (`booted`)"
+    },
+    {
+      "id": "Disk",
+      "what": "Free space on the disk that holds the Nix store. On a file system with an inode table, free inodes too"
+    },
+    {
+      "id": "Network",
+      "what": "Each interface with a global IPv4 address, and its addresses"
+    },
+    {
+      "id": "Failed units",
+      "what": "systemd units that failed"
+    },
+    {
+      "id": "Owner",
+      "what": "The version of `lmxd` and what it is doing"
+    },
+    {
+      "id": "Condition",
+      "what": "What needs attention and why, one line per condition"
+    },
+    {
+      "id": "Problem",
+      "what": "Why a fact could not be read. That fact shows `unknown`; the other lines still show"
+    }
+  ],
+  "short_words": [
+    {
+      "id": "degraded",
+      "what": "The running generation failed its health check"
+    },
+    {
+      "id": "finalize",
+      "what": "The update works, but removing older generations failed"
+    },
+    {
+      "id": "disk-low",
+      "what": "Less than 10% of the store disk is free"
+    },
+    {
+      "id": "restart",
+      "what": "A new generation is built and waits for a restart"
+    },
+    {
+      "id": "applying",
+      "what": "An update is being built now"
+    },
+    {
+      "id": "apply",
+      "what": "The Mac selected a generation that is not built yet"
+    },
+    {
+      "id": "lmxd?",
+      "what": "`lmxd` did not answer within 200 ms"
     }
   ]
 }

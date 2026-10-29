@@ -1,0 +1,7 @@
+{
+  "contract": 1,
+  "ok": true,
+  "data": {
+    "cancelled": true
+  }
+}

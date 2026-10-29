@@ -12,7 +12,7 @@ use lmx_model::{
 };
 
 use crate::{
-    checks::CheckId,
+    checks::{self, CheckId},
     cli::OutputArgs,
     dotfiles, findings, output,
     owner::{self, CallError},
@@ -27,9 +27,21 @@ const OWNER_HINT: &str = "Check systemctl status lmx.socket lmx.service and jour
 pub(crate) fn run(system: &System, args: &OutputArgs) -> io::Result<ExitCode> {
     let owner = owner::status(&system.owner_socket());
     let (markers, errors) = generations::read(&system.generation_paths());
-    let mut checks = vec![config(system), owner_check(&owner)];
-    checks.extend(conditions(owner.as_ref().ok(), &markers, errors.first()));
-    checks.extend(dotfiles::check(system));
+    let found = conditions(owner.as_ref().ok(), &markers, errors.first());
+    let checks: Vec<Check> = checks::DOCTOR
+        .into_iter()
+        .flat_map(|id| match id {
+            CheckId::Config => vec![config(system)],
+            CheckId::Owner => vec![owner_check(&owner)],
+            CheckId::Generations | CheckId::Disk => found
+                .iter()
+                .filter(|check| check.check == id.name())
+                .cloned()
+                .collect(),
+            CheckId::Dotfiles => dotfiles::check(system).into_iter().collect(),
+            CheckId::Firewall | CheckId::Listener | CheckId::Process => Vec::new(),
+        })
+        .collect();
     if args.json {
         output::write_json(&Envelope::success(Doctor {
             checks: checks.clone(),

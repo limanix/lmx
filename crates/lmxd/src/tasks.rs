@@ -1,10 +1,10 @@
 //! Workload kinds of `lmxd` and the runner that executes them.
 //!
-//! Every operation of `lmxd` is a Solti task whose kind lives under [`API_VERSION`]; the Task API
-//! lists it, streams its output and keeps its runs. Each kind runs one program. The runner turns
-//! such a task into a `solti.io/v1` subprocess task and builds it with a private subprocess runner,
-//! which clears the environment, owns the process group and captures the output. No API caller can
-//! start an arbitrary program as root: the private runner is not registered with the supervisor.
+//! Every operation of `lmxd` is a Solti task whose kind lives under [`API_VERSION`]. Each kind runs
+//! one program. The runner turns such a task into a `solti.io/v1` subprocess task and builds it with
+//! a private subprocess runner, which clears the environment, owns the process group and captures
+//! the output. The private runner is not registered with the supervisor, so no task can name an
+//! arbitrary program.
 
 use std::{fs, sync::Arc};
 
@@ -254,7 +254,11 @@ fn process(kind: Kind, spec: &Value, setup: &Setup) -> Result<Process, RunnerErr
             );
             process.env.push(("PATH".into(), SYSTEM_PATH.into()));
             if let Ok(text) = fs::read_to_string(inputs.join("environment")) {
-                process.env.extend(environment::variables(&text));
+                process.env.extend(
+                    environment::variables(&text)
+                        .into_iter()
+                        .filter(|(name, _)| name != "PATH"),
+                );
             }
             process
         }
@@ -526,7 +530,6 @@ mod tests {
             [
                 ("PATH".to_owned(), SYSTEM_PATH.to_owned()),
                 ("HTTP_PROXY".to_owned(), "http://proxy:3128".to_owned()),
-                ("PATH".to_owned(), "/opt/bin".to_owned()),
             ]
         );
     }
@@ -586,10 +589,12 @@ printf '%s\n' \
         .expect("write nix-store");
         fs::set_permissions(&nix_store, fs::Permissions::from_mode(0o755))
             .expect("make nix-store executable");
-        let grep = ["/usr/bin/grep", "/bin/grep"]
-            .into_iter()
-            .find(|path| Path::new(path).exists())
-            .expect("grep is installed");
+        let grep = std::env::var_os("PATH")
+            .iter()
+            .flat_map(std::env::split_paths)
+            .map(|directory| directory.join("grep"))
+            .find(|path| path.is_file())
+            .expect("grep is in PATH");
 
         let output = Command::new("/bin/sh")
             .args(["-c", ROOTS_SCRIPT, "sh"])

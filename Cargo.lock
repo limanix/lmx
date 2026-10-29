@@ -537,7 +537,7 @@ dependencies = [
 
 [[package]]
 name = "lmx"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "base64 0.23.1",
  "clap",
@@ -555,7 +555,7 @@ dependencies = [
 
 [[package]]
 name = "lmx-facts"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "lmx-model",
  "rustix",
@@ -567,7 +567,7 @@ dependencies = [
 
 [[package]]
 name = "lmx-ipc"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "hyper-util",
  "lmx-model",
@@ -583,7 +583,7 @@ dependencies = [
 
 [[package]]
 name = "lmx-model"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -592,7 +592,7 @@ dependencies = [
 
 [[package]]
 name = "lmxd"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "clap",
  "listenfd",
@@ -1111,36 +1111,12 @@ version = "0.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "58cb6388d35471ade7faa67e5fae018b66d1ca1db0ba3cd4ed7170ed915acfb8"
 dependencies = [
- "solti-api",
  "solti-core",
  "solti-exec",
  "solti-model",
  "solti-observe",
  "solti-runner",
  "taskvisor",
-]
-
-[[package]]
-name = "solti-api"
-version = "0.0.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e92f8eca2127abc1b2abefc1686cfaa80895e922ed2f4344dd9be5523156c16"
-dependencies = [
- "async-trait",
- "base64 0.23.1",
- "prost",
- "prost-types",
- "protoc-bin-vendored",
- "serde",
- "serde_json",
- "solti-core",
- "solti-model",
- "thiserror",
- "tokio-stream",
- "tonic",
- "tonic-prost",
- "tonic-prost-build",
- "tracing",
 ]
 
 [[package]]

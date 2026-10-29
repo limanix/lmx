@@ -10,7 +10,6 @@ use std::{
 use lmx_ipc::proto::owner_server::OwnerServer;
 use lmx_model::Config;
 use solti::{
-    api::{GrpcApi, SupervisorApiAdapter},
     core::{CoreError, SupervisorApi},
     exec::subprocess::SubprocessRunner,
     runner::RunnerRouter,
@@ -21,7 +20,7 @@ use tonic::{service::interceptor::InterceptedService, transport::Server};
 
 use crate::{
     apply::Applier,
-    auth::{PeerIdentity, TaskAccess},
+    auth::PeerIdentity,
     capture::Capture,
     journal::Journal,
     observer::{self, Observer, ObserverSchedule},
@@ -192,11 +191,6 @@ impl Daemon {
         shutdown: impl Future<Output = ()> + Send,
     ) -> Result<(), Error> {
         let own_uid = rustix::process::geteuid().as_raw();
-        let tasks = GrpcApi::new(Arc::new(SupervisorApiAdapter::new(Arc::clone(
-            &self.supervisor,
-        ))))
-        .with_authorizer(Arc::new(TaskAccess { own_uid }))
-        .server();
         let owner = OwnerServer::new(OwnerService {
             store: Arc::clone(&self.store),
             applier: Arc::clone(&self.applier),
@@ -211,7 +205,6 @@ impl Daemon {
             let stop_serving = Arc::clone(&stop_serving);
             Server::builder()
                 .add_service(InterceptedService::new(owner, PeerIdentity))
-                .add_service(InterceptedService::new(tasks, PeerIdentity))
                 .serve_with_incoming_shutdown(UnixListenerStream::new(listener), async move {
                     stop_serving.notified().await;
                 })
