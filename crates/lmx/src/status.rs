@@ -109,6 +109,7 @@ impl Word {
         Self::Unanswered,
     ];
 
+    /// Returns the word shown in short status output.
     pub(crate) const fn name(self) -> &'static str {
         match self {
             Self::Degraded => "degraded",
@@ -169,6 +170,7 @@ impl Line {
         Self::Problem,
     ];
 
+    /// Returns the label shown in status text output.
     pub(crate) const fn name(self) -> &'static str {
         match self {
             Self::Generation => "Generation",
