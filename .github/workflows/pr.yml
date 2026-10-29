@@ -20,13 +20,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: mr-chelyshkin/actions/task-run@v2
+      - uses: mr-chelyshkin/actions/task-run@577ea5b38e0b2ad2bffe7977574fda5e59657a60 # v2
         with:
           task: ci/markdown/fmt
 
   rust:
     needs: [markdown]
-    uses: mr-chelyshkin/actions/.github/workflows/ci-rust.yml@v2
+    uses: mr-chelyshkin/actions/.github/workflows/ci-rust.yml@577ea5b38e0b2ad2bffe7977574fda5e59657a60 # v2
     permissions:
       contents: read
     with:
@@ -57,7 +57,7 @@ jobs:
             lmx-rust-v1-${{ runner.os }}-${{ runner.arch }}-release-${{ matrix.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'rust-toolchain.toml') }}-
             lmx-rust-v1-${{ runner.os }}-${{ runner.arch }}-release-${{ matrix.arch }}-
       - name: Build the release archive
-        uses: mr-chelyshkin/actions/task-run@v2
+        uses: mr-chelyshkin/actions/task-run@577ea5b38e0b2ad2bffe7977574fda5e59657a60 # v2
         with:
           task: release/build
           args: ARCH=${{ matrix.arch }}
@@ -69,6 +69,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: mr-chelyshkin/actions/job-results-check@v2
+      - uses: mr-chelyshkin/actions/job-results-check@577ea5b38e0b2ad2bffe7977574fda5e59657a60 # v2
         with:
           results: ${{ toJSON(needs) }}
