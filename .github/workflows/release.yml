@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Check that the tag is on main
-        uses: mr-chelyshkin/actions/tag-branch-check@v2
+        uses: mr-chelyshkin/actions/tag-branch-check@577ea5b38e0b2ad2bffe7977574fda5e59657a60 # v2
         with:
           branch: main
       - name: Check that the tag matches the workspace version
@@ -47,7 +47,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Build the release archive
-        uses: mr-chelyshkin/actions/task-run@v2
+        uses: mr-chelyshkin/actions/task-run@577ea5b38e0b2ad2bffe7977574fda5e59657a60 # v2
         with:
           task: release/build
           args: ARCH=${{ matrix.arch }}
