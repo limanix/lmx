@@ -2,7 +2,7 @@
 //! a converged generation.
 
 use std::{
-    fs,
+    env, fs,
     os::unix::fs::{MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
@@ -17,10 +17,10 @@ use serde_json::{Value, json};
 use tokio::{net::UnixListener, runtime::Runtime, sync::oneshot, task::JoinHandle};
 
 const NIX_STORE: &str = r#"#!/bin/sh
-root=$(dirname "$(dirname "$0")")
+root=$(@dirname@ "$(@dirname@ "$0")")
 printf '%s\n' "$*" >> "$root/calls"
 case "$*" in
-  "--gc --quiet") sleep 2; cp "$root/disk-after.json" "$root/disk.json" ;;
+  "--gc --quiet") @sleep@ 2; @cp@ "$root/disk-after.json" "$root/disk.json" ;;
   "--gc --print-roots")
     echo '/proc/1/environ -> /nix/store/aaaa-glibc'
     echo '/home/dev/project/.direnv/flake-inputs/cccc-source -> /nix/store/cccc-source' ;;
@@ -32,9 +32,9 @@ root=${0%/bin/*}
 printf 'nixos-rebuild %s\n' "$*" >> "$root/calls"
 echo "building the system configuration..." >&2
 echo "HTTP_PROXY=$HTTP_PROXY"
-case $(/bin/cat "$root/build" 2>/dev/null) in
+case $(@cat@ "$root/build" 2>/dev/null) in
   fail) echo "error: builder for 'system.drv' failed" >&2; exit 1 ;;
-  hang) exec /bin/sleep 60 ;;
+  hang) exec @sleep@ 60 ;;
 esac
 while [ "$#" -gt 0 ]; do
   if [ "$1" = --flake ]; then flake=$2; break; fi
@@ -42,20 +42,19 @@ while [ "$#" -gt 0 ]; do
 done
 flake=${flake#path:}
 flake=${flake%#runtime}
-/bin/cp "$flake/runtime.json" "$root/nix/var/nix/profiles/system/etc/lmx/config.json"
+@cp@ "$flake/runtime.json" "$root/nix/var/nix/profiles/system/etc/lmx/config.json"
 "#;
 
-/// Fake `nix-env`: logs its call; `--delete-generations old` removes the first generation link.
 const NIX_ENV: &str = r#"#!/bin/sh
 root=${0%/bin/*}
 printf 'nix-env %s\n' "$*" >> "$root/calls"
-/bin/rm -f "$2-1-link"
+@rm@ -f "$2-1-link"
 "#;
 
 const SWITCH_TO_CONFIGURATION: &str = r#"#!/bin/sh
 root=${0%/nix/var/nix/profiles/system/bin/*}
 printf 'switch-to-configuration %s\n' "$*" >> "$root/calls"
-if [ "$(/bin/cat "$root/finalize" 2>/dev/null)" = fail ]; then
+if [ "$(@cat@ "$root/finalize" 2>/dev/null)" = fail ]; then
   echo 'boot loader update failed' >&2
   exit 1
 fi
@@ -86,7 +85,7 @@ const MOUNTINFO: &str = "\
 fn priority_tool(name: &str) -> String {
     format!(
         r#"#!/bin/sh
-root=$(dirname "$(dirname "$0")")
+root=$(@dirname@ "$(@dirname@ "$0")")
 printf '{name} %s\n' "$*" >> "$root/calls"
 shift 2
 exec "$@"
@@ -178,7 +177,7 @@ impl Guest {
                 "nix_store": path("bin/nix-store"),
                 "nice": path("bin/nice"),
                 "ionice": path("bin/ionice"),
-                "grep": "/usr/bin/grep",
+                "grep": host_tool("grep"),
                 "nixos_rebuild": path("bin/nixos-rebuild"),
                 "nix_env": path("bin/nix-env"),
                 "sudo": path("bin/sudo"),
@@ -316,9 +315,28 @@ impl Drop for Guest {
     }
 }
 
+fn host_tool(name: &str) -> String {
+    env::var_os("PATH")
+        .iter()
+        .flat_map(env::split_paths)
+        .map(|directory| directory.join(name))
+        .find(|path| path.is_file())
+        .unwrap_or_else(|| panic!("{name} is not in PATH"))
+        .display()
+        .to_string()
+}
+
+fn host_tools(script: &str) -> String {
+    ["cat", "cp", "dirname", "rm", "sleep"]
+        .into_iter()
+        .fold(script.to_owned(), |script, name| {
+            script.replace(&format!("@{name}@"), &host_tool(name))
+        })
+}
+
 fn executable(path: &Path, script: &str) {
     fs::create_dir_all(path.parent().expect("script has a parent")).expect("create parent");
-    fs::write(path, script).expect("write a script");
+    fs::write(path, host_tools(script)).expect("write a script");
     fs::set_permissions(path, fs::Permissions::from_mode(0o755)).expect("make it executable");
 }
 
@@ -376,7 +394,6 @@ fn a_disk_that_stays_low_is_reported_with_its_roots() {
     assert_eq!(answer["ok"], false);
     assert_eq!(answer["error"]["code"], "disk.low");
     assert_eq!(answer["error"]["details"]["freed_bytes"], 30 << 20);
-    // The roots report runs for the journal after the answer.
     let deadline = Instant::now() + Duration::from_secs(10);
     while guest.calls().len() < 2 && Instant::now() < deadline {
         thread::sleep(Duration::from_millis(50));

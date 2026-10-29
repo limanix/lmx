@@ -79,14 +79,10 @@ pub enum ErrorCode {
     DiskLow,
     /// The usage of the store file system cannot be read.
     DiskUnreadable,
-    /// A required network destination, such as the binary cache, is unreachable.
-    NetworkUnreachable,
     /// The caller is not allowed to run the operation.
     PermissionDenied,
     /// The mounted inputs belong to a different generation than requested.
     GenerationMismatch,
-    /// The caller requested a contract version this binary does not speak.
-    ContractUnsupported,
     /// The booted generation failed its health check.
     SystemDegraded,
     /// A wait ended before its condition held.
@@ -108,10 +104,8 @@ impl ErrorCode {
             Self::ApplyEnvironmentFailed => "apply.environment_failed",
             Self::DiskLow => "disk.low",
             Self::DiskUnreadable => "disk.unreadable",
-            Self::NetworkUnreachable => "network.unreachable",
             Self::PermissionDenied => "permission.denied",
             Self::GenerationMismatch => "generation.mismatch",
-            Self::ContractUnsupported => "contract.unsupported",
             Self::SystemDegraded => "system.degraded",
             Self::WaitTimeout => "wait.timeout",
             Self::FinalizeFailed => "finalize.failed",
@@ -129,10 +123,8 @@ impl ErrorCode {
             "apply.environment_failed" => Self::ApplyEnvironmentFailed,
             "disk.low" => Self::DiskLow,
             "disk.unreadable" => Self::DiskUnreadable,
-            "network.unreachable" => Self::NetworkUnreachable,
             "permission.denied" => Self::PermissionDenied,
             "generation.mismatch" => Self::GenerationMismatch,
-            "contract.unsupported" => Self::ContractUnsupported,
             "system.degraded" => Self::SystemDegraded,
             "wait.timeout" => Self::WaitTimeout,
             "finalize.failed" => Self::FinalizeFailed,
@@ -214,10 +206,8 @@ mod tests {
             ),
             (ErrorCode::DiskLow, "disk.low"),
             (ErrorCode::DiskUnreadable, "disk.unreadable"),
-            (ErrorCode::NetworkUnreachable, "network.unreachable"),
             (ErrorCode::PermissionDenied, "permission.denied"),
             (ErrorCode::GenerationMismatch, "generation.mismatch"),
-            (ErrorCode::ContractUnsupported, "contract.unsupported"),
             (ErrorCode::SystemDegraded, "system.degraded"),
             (ErrorCode::WaitTimeout, "wait.timeout"),
             (ErrorCode::FinalizeFailed, "finalize.failed"),

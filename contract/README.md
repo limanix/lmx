@@ -58,10 +58,8 @@ connection, has failed.
 | `apply.environment_failed` | The environment files of the generation could not be installed |
 | `disk.low` | Free bytes or inodes are below the platform minimum |
 | `disk.unreadable` | The usage of the store file system cannot be read |
-| `network.unreachable` | A required destination, such as the binary cache, is unreachable |
 | `permission.denied` | The caller is not allowed to run the operation |
 | `generation.mismatch` | The mounted inputs belong to a different generation than requested |
-| `contract.unsupported` | The caller requested a contract version this binary does not speak |
 | `system.degraded` | The booted generation failed its health check |
 | `wait.timeout` | A wait ended before its condition held |
 | `finalize.failed` | The finalize of the booted generation failed; the generation works |
@@ -102,12 +100,15 @@ still answered. Its conditions are computed when it is asked:
 
 Without a selected generation there is no generation condition. A booted
 generation that is healthy and still keeps older generations has none either:
-`lmxd` is about to remove them, and a `SystemFinalize` operation shows it. When
-the finalize fails, the generation is `FinalizeFailed` until a later try
-succeeds; while a try runs there is no generation condition, and a
-`SystemFinalize` operation shows it. An operation's `created_at` is when it was
-requested, in Unix milliseconds. Without the configuration, `ip` and `systemctl`
-are looked up in `PATH`, and a `config` problem marks the answer as degraded.
+`lmxd` is about to remove them, and a `SystemFinalize` operation shows it. After
+`lmxd` starts, it finalizes a healthy generation once even without older
+generations, which rewrites the boot entries; until then there is no generation
+condition either. When the finalize fails, the generation is `FinalizeFailed`
+until a later try succeeds; while a try runs there is no generation condition,
+and a `SystemFinalize` operation shows it. An operation's `created_at` is when
+it was requested, in Unix milliseconds. Without the configuration, `ip` and
+`systemctl` are looked up in `PATH`, and a `config` problem marks the answer as
+degraded.
 
 A generation is `null` when its stage has no valid marker, for example on a
 system built before `lmx` existed. A marker that exists but cannot be read also
@@ -171,15 +172,20 @@ relative `current` symlink to select the generation reported by status.
 `lmxd` checks both environment files, makes room in the store as
 `lmx store reserve` does, then builds the generation for the next boot with
 `nixos-rebuild boot`. The build receives its environment directly from the
-requested generation's inputs. Only after a successful build does `lmxd` install
-the environment files into `/etc/limanix`. A failed or cancelled build leaves
-the installed environment unchanged. Once the build succeeds, environment
-installation completes even if cancellation was requested meanwhile. If
-installation fails after the build, the system profile and boot entries may
-already have changed; apply is not an atomic transaction across the boot loader
-and environment files. Applying a generation that is already built runs
-`nixos-rebuild boot` again: it reuses the built system and writes the boot
-entries again.
+requested generation's inputs, except `PATH`, which stays the system's. Only
+after a successful build does `lmxd` install the environment files into
+`/etc/limanix`. A failed or cancelled build leaves the installed environment
+unchanged. Once the build succeeds, environment installation completes even if
+cancellation was requested meanwhile. If installation fails after the build, the
+system profile and boot entries may already have changed; apply is not an atomic
+transaction across the boot loader and environment files. A build that fails or
+is cancelled after `nixos-rebuild` switched the system profile may also leave
+the profile and the boot entries on the new generation: `built` then names a
+generation the host did not select, `lmx status` reports `OutOfDate`, and the
+next boot may start that generation with the previous environment files.
+Applying a generation again repairs both. Applying a generation that is already
+built runs `nixos-rebuild boot` again: it reuses the built system and writes the
+boot entries again.
 
 The apply belongs to `lmxd`: interrupting the command does not stop it, and
 running the command again attaches to the running apply. An apply of another
@@ -205,10 +211,10 @@ restart the VM to boot the generation.
 
 | Error code | When |
 | -- | -- |
-| `generation.mismatch` | The candidate directory's marker does not match `GENERATION`; `details` has `requested` and `mounted` (the candidate marker, or `null` without one) |
+| `generation.mismatch` | The candidate directory's marker does not match `GENERATION`, or is not read within five seconds; `details` has `requested` and `mounted` (the candidate marker, or `null` without one) |
 | `apply.environment_failed` | The environment files cannot be installed |
 | `apply.build_failed` | `nixos-rebuild` failed; `details` has `exit_code` when it exited, and `disk` with the store disk usage when the disk is full |
-| `apply.cancelled` | `lmx apply cancel`, an apply of another generation, or a cancel through the Task API stopped the apply; exit status `130` |
+| `apply.cancelled` | `lmx apply cancel` or an apply of another generation stopped the apply; exit status `130` |
 | `permission.denied` | The caller is not root |
 | `owner.unavailable` | `lmxd` cannot be reached, or it stopped before the apply ended; exit status `3` |
 
@@ -216,7 +222,8 @@ Without `--json`, the command prints the build's lines on their own streams and
 a closing sentence.
 
 Examples: [built](v1/apply-restart-required.json),
-[build failed](v1/apply-build-failed.json), [followed](v1/apply-follow.jsonl).
+[build failed](v1/apply-build-failed.json), [followed](v1/apply-follow.jsonl),
+[mismatch](v1/apply-generation-mismatch.json).
 
 ## `lmx apply cancel -g GENERATION`
 
@@ -233,6 +240,8 @@ boot loader update that `nixos-rebuild` started finishes in its own unit.
 | -- | -- |
 | `permission.denied` | The caller is not root |
 | `owner.unavailable` | `lmxd` cannot be reached; exit status `3` |
+
+Example: [cancelled](v1/apply-cancel.json).
 
 ## `lmx doctor`
 

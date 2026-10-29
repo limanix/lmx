@@ -24,7 +24,6 @@ pub(crate) enum CheckId {
 }
 
 /// The checks of `lmx doctor`, in the order it reports them.
-#[cfg(test)]
 pub(crate) const DOCTOR: [CheckId; 5] = [
     CheckId::Config,
     CheckId::Owner,
@@ -34,7 +33,6 @@ pub(crate) const DOCTOR: [CheckId; 5] = [
 ];
 
 /// The checks of `lmx net check`, in the order it reports them.
-#[cfg(test)]
 pub(crate) const NET: [CheckId; 3] = [CheckId::Firewall, CheckId::Listener, CheckId::Process];
 
 impl CheckId {

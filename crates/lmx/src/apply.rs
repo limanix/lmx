@@ -17,7 +17,7 @@ use lmx_model::{
 use crate::{output, owner, system::System};
 
 /// Exit status of a cancelled apply, as of a command stopped with Ctrl-C.
-const CANCELLED: u8 = 130;
+pub(crate) const CANCELLED: u8 = 130;
 
 /// Runs `lmx apply -g GENERATION`.
 pub(crate) fn run(

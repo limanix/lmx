@@ -14,7 +14,7 @@ use crate::{output, process};
 pub(crate) const USAGE: &str = "Usage: limanix-session NAME (one nonempty session name)";
 
 /// Exit status when no provider is configured, as for a missing command in a shell.
-const NO_PROVIDER: u8 = 127;
+pub(crate) const NO_PROVIDER: u8 = 127;
 
 /// Opens session `name` with the configured provider.
 pub(crate) fn run(config: &Result<Config, String>, name: &OsStr) -> ExitCode {

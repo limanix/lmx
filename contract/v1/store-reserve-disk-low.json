@@ -19,7 +19,8 @@
         "inodes": 1048576,
         "free_inodes": 98304
       },
-      "freed_bytes": 268435456
+      "freed_bytes": 268435456,
+      "collect_error": "process exited with non-zero code: 1"
     }
   }
 }

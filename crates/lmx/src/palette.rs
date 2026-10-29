@@ -136,6 +136,12 @@ impl Palette {
     }
 }
 
+/// Variable that turns colors off when it is set and not empty.
+pub(crate) const NO_COLOR: &str = "NO_COLOR";
+
+/// Variable that turns colors off when it is unset, empty or `dumb`.
+pub(crate) const TERM: &str = "TERM";
+
 /// Whether and how text is colored.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Paint {
@@ -150,8 +156,8 @@ impl Paint {
     /// an empty `TERM` counts as `dumb`, as in the platform prompt.
     pub(crate) fn detect(palette: Palette) -> Self {
         let terminal = io::stdout().is_terminal();
-        let no_color = env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
-        let dumb = env::var_os("TERM").is_none_or(|term| term.is_empty() || term == "dumb");
+        let no_color = env::var_os(NO_COLOR).is_some_and(|value| !value.is_empty());
+        let dumb = env::var_os(TERM).is_none_or(|term| term.is_empty() || term == "dumb");
         Self {
             enabled: terminal && !no_color && !dumb,
             palette,

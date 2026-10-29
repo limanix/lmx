@@ -6,6 +6,8 @@
 //! its check is `Degraded` and keeps the older generations for a rollback; it is checked again every
 //! minute. A finalize that fails is `FinalizeFailed`: the generation works, and the finalize is tried
 //! again later. The check judges an update; once the generation is finalized and healthy, it stops.
+//! After `lmxd` starts, the first finalize of a healthy generation runs even without older
+//! generations: it rewrites boot entries that a failed or interrupted finalize left behind.
 
 use std::{
     sync::{
@@ -27,7 +29,7 @@ use crate::{
     apply::SYSTEM_SLOT,
     capture::Capture,
     launch::{self, Placement},
-    paths::Paths,
+    paths::{self, MOUNT_READ, Paths},
     store::Store,
     tasks::{self, Kind, Priority},
 };
@@ -77,9 +79,11 @@ pub(crate) enum Health {
     Unhealthy(String),
 }
 
-/// Where the finalize of the booted generation stands.
+/// Where finalize of the booted generation stands.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Finalize {
+    /// None succeeded since `lmxd` started.
+    Unconfirmed,
     /// None runs, and none failed.
     Idle,
     /// A finalize runs; the boot entries may still list removed generations.
@@ -129,7 +133,7 @@ impl Observer {
             paths,
             home,
             health: Mutex::new(Health::Unknown),
-            finalize: Mutex::new(Finalize::Idle),
+            finalize: Mutex::new(Finalize::Unconfirmed),
             created: AtomicU64::new(0),
         }
     }
@@ -164,13 +168,26 @@ impl Observer {
     ///
     /// A failed finalize is tried again after `retry`.
     pub(crate) async fn tick(&self, retry: Duration) {
-        let (generations, _) = lmx_facts::generations::read(&self.paths.generations());
-        let Some(generation) = settled(&generations).map(ToOwned::to_owned) else {
-            self.set_health(Health::Unknown);
-            self.set_finalize(Finalize::Idle);
+        let markers = self.paths.clone();
+        let Some((generations, kept)) = paths::blocking(move || {
+            (
+                lmx_facts::generations::read(&markers.generations()).0,
+                lmx_facts::generations::system_generations(&markers.profiles()),
+            )
+        })
+        .await
+        else {
+            tracing::warn!("the generation markers were not read within {MOUNT_READ:?}");
             return;
         };
-        let kept = match lmx_facts::generations::system_generations(&self.paths.profiles()) {
+        let Some(generation) = settled(&generations).map(ToOwned::to_owned) else {
+            self.set_health(Health::Unknown);
+            if self.finalize() != Finalize::Unconfirmed {
+                self.set_finalize(Finalize::Idle);
+            }
+            return;
+        };
+        let kept = match kept {
             Ok(kept) => kept,
             Err(error) => {
                 tracing::warn!(%error, "the system profile generations cannot be read");
@@ -188,7 +205,12 @@ impl Observer {
         if !(healthy && finalize) {
             return;
         }
-        let (generations, _) = lmx_facts::generations::read(&self.paths.generations());
+        let markers = self.paths.generations();
+        let Some((generations, _)) =
+            paths::blocking(move || lmx_facts::generations::read(&markers)).await
+        else {
+            return;
+        };
         if settled(&generations) != Some(generation.as_str()) {
             return;
         }
@@ -207,7 +229,9 @@ impl Observer {
                     "finalized generation {generation}"
                 );
                 self.set_finalize(Finalize::Idle);
-                if let Err(error) = self.store.collect(Priority::Idle).await {
+                if kept > 1
+                    && let Err(error) = self.store.collect(Priority::Idle).await
+                {
                     tracing::warn!(%error, "Collecting unreferenced store paths failed.");
                 }
             }
@@ -327,12 +351,13 @@ enum Step {
 /// and `finalize`.
 ///
 /// A failed finalize runs again once its back-off ends, even when it removed the older generations
-/// before it failed, and the retry rewrites the boot entries.
+/// before it failed, and the retry rewrites the boot entries. A generation that no finalize
+/// confirmed since `lmxd` started is finalized once, even without older generations.
 fn step(kept: usize, health: &Health, finalize: &Finalize, now: Instant) -> Step {
     match finalize {
         Finalize::Running => Step::Rest,
         Finalize::Failed { retry, .. } if now < *retry => Step::Rest,
-        Finalize::Failed { .. } => Step::Check { finalize: true },
+        Finalize::Unconfirmed | Finalize::Failed { .. } => Step::Check { finalize: true },
         Finalize::Idle if kept > 1 => Step::Check { finalize: true },
         Finalize::Idle if *health == Health::Healthy => Step::Rest,
         Finalize::Idle => Step::Check { finalize: false },
@@ -390,7 +415,8 @@ pub(crate) fn conditions(
             CONVERGED,
             format!("Generation {desired} is booted, healthy and finalized."),
         )],
-        (Health::Healthy, Finalize::Idle | Finalize::Running) | (Health::Unknown, _) => Vec::new(),
+        (Health::Healthy, Finalize::Unconfirmed | Finalize::Idle | Finalize::Running)
+        | (Health::Unknown, _) => Vec::new(),
     }
 }
 

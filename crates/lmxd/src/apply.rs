@@ -30,7 +30,7 @@ use crate::{
     capture::{Capture, Line},
     environment,
     launch::{self, Ended, Placement},
-    paths::Paths,
+    paths::{self, MOUNT_READ, Paths},
     store::Store,
     tasks::{self, Kind},
 };
@@ -210,16 +210,17 @@ impl Applier {
         }
     }
 
-    /// Starts the apply of `generation`, or joins the running one.
+    /// Starts apply of `generation`, or joins the running one.
     ///
     /// The candidate directory must have the requested generation's marker. An apply of another
     /// generation is cancelled first, and the decision made again once it stopped.
     pub(crate) async fn apply(self: &Arc<Self>, generation: &str) -> Result<Joined, ErrorBody> {
         let mut current = self.current.lock().await;
         loop {
-            let inputs = self
-                .paths
-                .candidate(generation)
+            let (located, requested) = (self.paths.clone(), generation.to_owned());
+            let inputs = paths::blocking(move || located.candidate(&requested))
+                .await
+                .ok_or_else(|| unanswered(generation))?
                 .map_err(|found| mismatch(generation, found.as_deref()))?;
             let running = current.clone().filter(|run| run.running());
             match decide(generation, running.as_ref()) {
@@ -473,6 +474,21 @@ fn mismatch(requested: &str, mounted: Option<&str>) -> ErrorBody {
     error
         .details
         .insert("mounted".into(), mounted.map_or(Value::Null, Value::from));
+    error
+}
+
+/// The failure of an apply whose candidate marker was not read in time, as on a host mount that
+/// stopped answering.
+fn unanswered(requested: &str) -> ErrorBody {
+    let mut error = failure(
+        ErrorCode::GenerationMismatch,
+        format!(
+            "The marker at /mnt/limanix/{requested} was not read within {MOUNT_READ:?}; the host \
+             mount does not answer."
+        ),
+    );
+    error.details.insert("requested".into(), requested.into());
+    error.details.insert("mounted".into(), Value::Null);
     error
 }
 

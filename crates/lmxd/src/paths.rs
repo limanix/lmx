@@ -1,11 +1,25 @@
 //! Guest locations that `lmxd` reads and writes, below a system root.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use lmx_facts::{
     generations::{GenerationPaths, PROFILES_PATH},
     mounts::MOUNTINFO_PATH,
 };
+
+/// Longest wait for a read of the host mount, which hangs while the host does not answer.
+pub(crate) const MOUNT_READ: Duration = Duration::from_secs(5);
+
+/// Runs `read` on the blocking pool, off the runtime's workers; `None` when it does not end within
+/// [`MOUNT_READ`], as on a host mount that stopped answering.
+pub(crate) async fn blocking<T: Send + 'static>(
+    read: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
+    tokio::time::timeout(MOUNT_READ, tokio::task::spawn_blocking(read))
+        .await
+        .ok()?
+        .ok()
+}
 
 /// Guest locations below a system root: `/` in a guest, a prepared tree in tests.
 #[derive(Clone, Debug, PartialEq, Eq)]

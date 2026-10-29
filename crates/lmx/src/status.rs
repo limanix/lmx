@@ -26,7 +26,7 @@ const SHORT_TIMEOUT: Duration = Duration::from_millis(200);
 pub(crate) fn run(system: &System, args: &StatusArgs) -> io::Result<ExitCode> {
     if args.short {
         let words = owner::status_within(&system.owner_socket(), SHORT_TIMEOUT)
-            .map_or_else(|_| vec!["lmxd?"], |owner| short(&owner));
+            .map_or_else(|_| vec![Word::Unanswered.name()], |owner| short(&owner));
         if !words.is_empty() {
             output::write_text(&format!("{}\n", words.join(" ")))?;
         }
@@ -59,23 +59,151 @@ fn short(owner: &Owner) -> Vec<&'static str> {
         .any(|operation| operation.kind == "SystemApply");
     let mut words = Vec::new();
     if holds(DEGRADED) {
-        words.push("degraded");
+        words.push(Word::Degraded);
     }
     if holds(FINALIZE_FAILED) {
-        words.push("finalize");
+        words.push(Word::Finalize);
     }
     if holds(DISK_LOW) {
-        words.push("disk-low");
+        words.push(Word::DiskLow);
     }
     if holds(RESTART_REQUIRED) {
-        words.push("restart");
+        words.push(Word::Restart);
     }
     if applying {
-        words.push("applying");
+        words.push(Word::Applying);
     } else if holds(OUT_OF_DATE) {
-        words.push("apply");
+        words.push(Word::Apply);
     }
-    words
+    words.into_iter().map(Word::name).collect()
+}
+
+/// A word of `lmx status --short`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Word {
+    /// The running generation failed its health check.
+    Degraded,
+    /// Removing the older generations failed.
+    Finalize,
+    /// The store disk is low.
+    DiskLow,
+    /// A built generation waits for a restart.
+    Restart,
+    /// An update is being built.
+    Applying,
+    /// The selected generation is not built.
+    Apply,
+    /// `lmxd` did not answer in time.
+    Unanswered,
+}
+
+impl Word {
+    #[cfg(test)]
+    pub(crate) const ALL: [Self; 7] = [
+        Self::Degraded,
+        Self::Finalize,
+        Self::DiskLow,
+        Self::Restart,
+        Self::Applying,
+        Self::Apply,
+        Self::Unanswered,
+    ];
+
+    /// Returns the word shown in short status output.
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::Degraded => "degraded",
+            Self::Finalize => "finalize",
+            Self::DiskLow => "disk-low",
+            Self::Restart => "restart",
+            Self::Applying => "applying",
+            Self::Apply => "apply",
+            Self::Unanswered => "lmxd?",
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn what(self) -> String {
+        match self {
+            Self::Degraded => "The running generation failed its health check".into(),
+            Self::Finalize => "The update works, but removing older generations failed".into(),
+            Self::DiskLow => "Less than 10% of the store disk is free".into(),
+            Self::Restart => "A new generation is built and waits for a restart".into(),
+            Self::Applying => "An update is being built now".into(),
+            Self::Apply => "The Mac selected a generation that is not built yet".into(),
+            Self::Unanswered => format!(
+                "`lmxd` did not answer within {} ms",
+                SHORT_TIMEOUT.as_millis()
+            ),
+        }
+    }
+}
+
+/// A line of the text output of `lmx status`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Line {
+    /// The three generations.
+    Generation,
+    /// The store disk.
+    Disk,
+    /// The addressed interfaces.
+    Network,
+    /// The failed systemd units.
+    FailedUnits,
+    /// `lmxd`.
+    Owner,
+    /// A condition of `lmxd`.
+    Condition,
+    /// A fact that could not be read.
+    Problem,
+}
+
+impl Line {
+    #[cfg(test)]
+    pub(crate) const ALL: [Self; 7] = [
+        Self::Generation,
+        Self::Disk,
+        Self::Network,
+        Self::FailedUnits,
+        Self::Owner,
+        Self::Condition,
+        Self::Problem,
+    ];
+
+    /// Returns the label shown in status text output.
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::Generation => "Generation",
+            Self::Disk => "Disk",
+            Self::Network => "Network",
+            Self::FailedUnits => "Failed units",
+            Self::Owner => "Owner",
+            Self::Condition => "Condition",
+            Self::Problem => "Problem",
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn what(self) -> &'static str {
+        match self {
+            Self::Generation => {
+                "The generation the Mac selected (`desired`), the one built for the next boot \
+                 (`built`) and the one running now (`booted`)"
+            }
+            Self::Disk => {
+                "Free space on the disk that holds the Nix store. On a file system with an inode \
+                 table, free inodes too"
+            }
+            Self::Network => "Each interface with a global IPv4 address, and its addresses",
+            Self::FailedUnits => "systemd units that failed",
+            Self::Owner => "The version of `lmxd` and what it is doing",
+            Self::Condition => "What needs attention and why, one line per condition",
+            Self::Problem => {
+                "Why a fact could not be read. That fact shows `unknown`; the other lines still \
+                 show"
+            }
+        }
+    }
 }
 
 /// Reads every fact of [`Status`].
@@ -140,7 +268,7 @@ pub(crate) fn render(status: &Status) -> String {
     let generations = &status.generations;
     let mut rows = vec![
         (
-            "Generation",
+            Line::Generation.name(),
             format!(
                 "desired {}, built {}, booted {}",
                 generations.desired.clone().unwrap_or_else(unknown),
@@ -149,11 +277,11 @@ pub(crate) fn render(status: &Status) -> String {
             ),
         ),
         (
-            "Disk",
+            Line::Disk.name(),
             status.disk.as_ref().map_or_else(unknown, format::disk),
         ),
         (
-            "Network",
+            Line::Network.name(),
             status
                 .interfaces
                 .as_ref()
@@ -171,7 +299,7 @@ pub(crate) fn render(status: &Status) -> String {
                 }),
         ),
         (
-            "Failed units",
+            Line::FailedUnits.name(),
             status.failed_units.as_ref().map_or_else(unknown, |units| {
                 if units.is_empty() {
                     "none".into()
@@ -182,7 +310,7 @@ pub(crate) fn render(status: &Status) -> String {
         ),
     ];
     rows.push((
-        "Owner",
+        Line::Owner.name(),
         status.owner.as_ref().map_or_else(unknown, |owner| {
             let doing: Vec<String> = owner
                 .operations
@@ -198,10 +326,13 @@ pub(crate) fn render(status: &Status) -> String {
         }),
     ));
     for condition in status.owner.iter().flat_map(|owner| &owner.conditions) {
-        rows.push(("Condition", condition.message.clone()));
+        rows.push((Line::Condition.name(), condition.message.clone()));
     }
     for problem in &status.problems {
-        rows.push(("Problem", format!("{}: {}", problem.fact, problem.message)));
+        rows.push((
+            Line::Problem.name(),
+            format!("{}: {}", problem.fact, problem.message),
+        ));
     }
     layout::rows(&rows, LABEL)
 }

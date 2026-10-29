@@ -99,7 +99,9 @@ pub struct BuildFailure {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Apply, ApplyEvent, BuildFailure, CONTRACT_VERSION, Envelope, ErrorCode};
+    use crate::{
+        Apply, ApplyEvent, BuildFailure, CONTRACT_VERSION, CancelApply, Envelope, ErrorCode,
+    };
 
     #[test]
     fn contract_examples_round_trip() {
@@ -117,6 +119,22 @@ mod tests {
         let failure: BuildFailure =
             serde_json::from_value(error.details.into()).expect("details are a build failure");
         assert_eq!(failure.exit_code, Some(1));
+        assert!(failure.disk.is_some());
+        assert_eq!(serde_json::to_value(&envelope).expect("encode"), original);
+
+        let example = include_str!("../../../contract/v1/apply-generation-mismatch.json");
+        let original: serde_json::Value = serde_json::from_str(example).expect("example is JSON");
+        let envelope: Envelope<Apply> = serde_json::from_str(example).expect("example decodes");
+        let error = envelope.error.clone().expect("a failure");
+        assert_eq!(error.code, ErrorCode::GenerationMismatch);
+        assert_eq!(error.details["mounted"], "ba9876543210");
+        assert_eq!(serde_json::to_value(&envelope).expect("encode"), original);
+
+        let example = include_str!("../../../contract/v1/apply-cancel.json");
+        let original: serde_json::Value = serde_json::from_str(example).expect("example is JSON");
+        let envelope: Envelope<CancelApply> =
+            serde_json::from_str(example).expect("example decodes");
+        assert_eq!(envelope.data, Some(CancelApply { cancelled: true }));
         assert_eq!(serde_json::to_value(&envelope).expect("encode"), original);
     }
 

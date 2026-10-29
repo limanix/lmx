@@ -13,7 +13,6 @@ use lmx_ipc::{
 use lmx_model::{Apply, ApplyEvent, ApplyState, Condition, ErrorBody, ErrorCode, Operation, Owner};
 use serde_json::Map;
 use solti::{
-    api::ApiIdentity,
     core::SupervisorApi,
     model::{TaskQuery, TaskWorkload},
 };
@@ -23,9 +22,10 @@ use tonic::{Request, Response, Status};
 
 use crate::{
     apply::{Applier, Joined, Message},
-    auth, launch,
+    auth::{self, Peer},
+    launch,
     observer::{self, Finalize, Health, Observer},
-    paths::Paths,
+    paths::{self, Paths},
     store::Store,
     tasks::API_VERSION,
 };
@@ -50,10 +50,18 @@ pub(crate) struct OwnerService {
 }
 
 impl OwnerService {
-    /// Conditions of the generations and the store disk now.
-    fn conditions(&self) -> Vec<Condition> {
-        let (generations, _) = lmx_facts::generations::read(&self.paths.generations());
-        let kept = lmx_facts::generations::system_generations(&self.paths.profiles()).ok();
+    /// Conditions of the generations and the store disk now; without generation conditions when the
+    /// markers are not read in time.
+    async fn conditions(&self) -> Vec<Condition> {
+        let markers = self.paths.clone();
+        let (generations, kept) = paths::blocking(move || {
+            (
+                lmx_facts::generations::read(&markers.generations()).0,
+                lmx_facts::generations::system_generations(&markers.profiles()).ok(),
+            )
+        })
+        .await
+        .unwrap_or_default();
         let (health, finalize) = self
             .observer
             .as_ref()
@@ -76,7 +84,7 @@ impl proto::owner_server::Owner for OwnerService {
     ) -> Result<Response<StatusResponse>, Status> {
         let owner = Owner {
             version: env!("CARGO_PKG_VERSION").into(),
-            conditions: self.conditions(),
+            conditions: self.conditions().await,
             operations: operations(&self.supervisor),
         };
         Ok(Response::new(owner.into()))
@@ -86,7 +94,7 @@ impl proto::owner_server::Owner for OwnerService {
         &self,
         request: Request<ReserveRequest>,
     ) -> Result<Response<ReserveResponse>, Status> {
-        let caller = request.extensions().get::<ApiIdentity>();
+        let caller = request.extensions().get::<Peer>();
         let outcome = if auth::privileged(caller, self.own_uid) {
             match self.store.reserve().await {
                 Ok(reserve) => Outcome::Result(reserve.into()),

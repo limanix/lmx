@@ -5,7 +5,14 @@
     "code": "apply.build_failed",
     "message": "nixos-rebuild failed with exit status 1.",
     "details": {
-      "exit_code": 1
+      "exit_code": 1,
+      "disk": {
+        "bytes": 17179869184,
+        "free_bytes": 268435456,
+        "available_bytes": 0,
+        "inodes": 1048576,
+        "free_inodes": 52428
+      }
     }
   }
 }

@@ -1,0 +1,12 @@
+{
+  "contract": 1,
+  "ok": false,
+  "error": {
+    "code": "generation.mismatch",
+    "message": "Generation 0123456789ab does not match the marker at /mnt/limanix/0123456789ab (ba9876543210).",
+    "details": {
+      "requested": "0123456789ab",
+      "mounted": "ba9876543210"
+    }
+  }
+}

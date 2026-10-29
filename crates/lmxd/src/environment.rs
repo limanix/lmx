@@ -6,7 +6,7 @@
 //! shells source `environment.sh`. Only root and the development account's group may read them.
 
 use std::{
-    fs::{self, OpenOptions, Permissions},
+    fs::{self, File, OpenOptions, Permissions},
     io::{self, Write},
     os::unix::fs::{OpenOptionsExt, PermissionsExt, chown},
     path::Path,
@@ -36,7 +36,8 @@ pub(crate) fn validate(inputs: &Path) -> io::Result<()> {
 /// Installs the generation's environment files into `/etc/limanix`.
 ///
 /// The directory gets mode `0755`. Each file is written beside its target with mode `0640` and the
-/// group `gid`, then renamed over it; a reader never sees half a file.
+/// group `gid`, then renamed over it; a reader never sees half a file. The directory is synced
+/// after both renames, so both survive a power loss.
 pub(crate) fn install(paths: &Paths, inputs: &Path, gid: u32) -> io::Result<()> {
     let files = contents(inputs)?;
     let directory = paths.environment();
@@ -58,7 +59,7 @@ pub(crate) fn install(paths: &Paths, inputs: &Path, gid: u32) -> io::Result<()> 
     for name in FILES {
         fs::rename(directory.join(format!(".{name}.new")), directory.join(name))?;
     }
-    Ok(())
+    File::open(&directory)?.sync_all()
 }
 
 /// Variables of a generation's `environment` file, in file order.

@@ -13,7 +13,7 @@ use lmx_facts::{
 use lmx_model::{Check, CheckStatus, Envelope, NetCheck, Ports, Protocol};
 
 use crate::{
-    checks::CheckId,
+    checks::{self, CheckId},
     findings, output,
     palette::{Paint, Palette},
     system::System,
@@ -58,16 +58,23 @@ fn checks(system: &System, port: u16, protocol: Protocol) -> Vec<Check> {
             .iter()
             .any(|(holder, _)| holder.command == DOCKER_PROXY)
     });
-    let mut checks = vec![
-        firewall(ports, port, protocol, docker),
-        listener(&listeners, port, protocol),
-    ];
-    if let Some((holders, complete)) = held {
-        checks.push(process(&holders, complete, port, protocol, |uid| {
-            user_name(system, uid)
-        }));
-    }
-    checks
+    checks::NET
+        .into_iter()
+        .filter_map(|id| match id {
+            CheckId::Firewall => Some(firewall(ports.clone(), port, protocol, docker)),
+            CheckId::Listener => Some(listener(&listeners, port, protocol)),
+            CheckId::Process => held.as_ref().map(|(holders, complete)| {
+                process(holders, *complete, port, protocol, |uid| {
+                    user_name(system, uid)
+                })
+            }),
+            CheckId::Config
+            | CheckId::Owner
+            | CheckId::Generations
+            | CheckId::Disk
+            | CheckId::Dotfiles => None,
+        })
+        .collect()
 }
 
 /// Whether the guest firewall opens `port` for `protocol`, from the declared ports; a port that
