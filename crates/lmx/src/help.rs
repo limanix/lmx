@@ -168,7 +168,7 @@ fn render(card: &Card, paint: Paint) -> String {
         text.push_str(&format!("  {}\n", paint.bold(&line)));
     }
     for line in wrap(&card.summary, CARD) {
-        text.push_str(&format!("  {}\n", paint.color(palette.subtext, &line)));
+        text.push_str(&format!("  {}\n", paint.color(palette.subtle, &line)));
     }
     if !card.commands.is_empty() || !card.tips.is_empty() {
         text.push('\n');
@@ -257,7 +257,7 @@ mod tests {
                 ports: Default::default(),
             },
             theme: Theme {
-                flavor: "mocha".into(),
+                name: "catppuccin-mocha".into(),
                 palette: Default::default(),
                 ansi: Default::default(),
             },

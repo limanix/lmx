@@ -262,7 +262,7 @@ fn render(facts: &Facts, paint: Paint) -> String {
         text.push_str(&format!(
             "  {}  {}\n",
             paint.color(palette.blue, &format!("{command:<35}")),
-            paint.color(palette.subtext, description)
+            paint.color(palette.subtle, description)
         ));
     }
     text.push('\n');
@@ -465,7 +465,7 @@ fn guest(facts: &Facts, paint: Paint, attention: &[Attention]) -> Vec<Line> {
         let color = if caption == "LimaNix" {
             palette.blue
         } else {
-            palette.subtext
+            palette.subtle
         };
         let plain = if caption.is_empty() {
             mark.to_owned()
@@ -505,7 +505,7 @@ fn guest(facts: &Facts, paint: Paint, attention: &[Attention]) -> Vec<Line> {
         }
         lines.push(Line::colored(paint, color, &state));
     }
-    extend(&mut lines, paint, palette.subtext, &facts.system, LEFT);
+    extend(&mut lines, paint, palette.subtle, &facts.system, LEFT);
     if attention.is_empty() {
         extend(&mut lines, paint, palette.muted, &value, LEFT);
     }
@@ -542,7 +542,7 @@ fn guest(facts: &Facts, paint: Paint, attention: &[Attention]) -> Vec<Line> {
     if !network.is_empty() {
         group(&mut lines, paint, "NETWORK");
         for value in network {
-            extend(&mut lines, paint, palette.subtext, &value, LEFT);
+            extend(&mut lines, paint, palette.subtle, &value, LEFT);
         }
     }
     shared(&mut lines, facts, paint);
@@ -598,9 +598,9 @@ fn modules(facts: &Facts, paint: Paint) -> Vec<Line> {
         Line::blank(),
     ];
     match &facts.modules {
-        None => lines.push(Line::colored(paint, palette.subtext, "unknown")),
+        None => lines.push(Line::colored(paint, palette.subtle, "unknown")),
         Some(modules) if modules.is_empty() => {
-            lines.push(Line::colored(paint, palette.subtext, "none"))
+            lines.push(Line::colored(paint, palette.subtle, "none"))
         }
         Some(modules) => {
             for module in modules.iter().take(MODULE_LIMIT) {
@@ -677,14 +677,14 @@ fn shared(lines: &mut Vec<Line>, facts: &Facts, paint: Paint) {
         extend(
             lines,
             paint,
-            paint.palette().subtext,
+            paint.palette().subtle,
             "unavailable; run lmx info",
             LEFT,
         );
         return;
     };
     if mounts.is_empty() {
-        lines.push(Line::colored(paint, paint.palette().subtext, "none"));
+        lines.push(Line::colored(paint, paint.palette().subtle, "none"));
         return;
     }
     let width = mounts
@@ -695,7 +695,7 @@ fn shared(lines: &mut Vec<Line>, facts: &Facts, paint: Paint) {
         .min(LEFT - 4);
     for mount in mounts {
         let (mode, color) = if mount.read_only {
-            ("ro", paint.palette().peach)
+            ("ro", paint.palette().orange)
         } else {
             ("rw", paint.palette().green)
         };
