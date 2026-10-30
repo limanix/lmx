@@ -54,7 +54,9 @@ checks, and `task release/build ARCH=aarch64` builds a release archive in
 
 ## Contributing
 
-Follow the
-[contribution guide](https://github.com/limanix/.github/blob/main/CONTRIBUTING.md).
-Use [Issues](https://github.com/limanix/lmx/issues) for questions, bug reports
-and feature requests. Licensed under [Apache 2.0](LICENSE).
+Follow [CONTRIBUTING.md](CONTRIBUTING.md) for the work in this repository and
+the
+[organization guide](https://github.com/limanix/.github/blob/main/CONTRIBUTING.md)
+for issues and release labels. Use
+[Issues](https://github.com/limanix/lmx/issues) for questions, bug reports and
+feature requests. Licensed under [Apache 2.0](LICENSE).

@@ -161,11 +161,11 @@ pub struct Ports {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Theme {
-    /// `system`, the terminal's own colors and background.
-    pub flavor: String,
-    /// The flavor's colors by name, such as `blue`, as `#rrggbb`.
+    /// `system`, the terminal's own colors and background, or the name of a catalog theme.
+    pub name: String,
+    /// The theme's colors by role, such as `blue`, as `#rrggbb`.
     pub palette: BTreeMap<String, String>,
-    /// With the `system` flavor, the terminal color that stands for each name of `palette`: one
+    /// With the `system` theme, the terminal color that stands for each role of `palette`: one
     /// of the terminal's 16 colors, 0 to 15, or `None` for its default color.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub ansi: BTreeMap<String, Option<u8>>,
@@ -235,7 +235,7 @@ mod tests {
         "disk": {"collect_percent": 20, "minimum_percent": 10},
         "health": {"units": ["sshd.service", "lmx.socket"]},
         "network": {"ports": {"tcp": [8080], "udp": []}},
-        "theme": {"flavor": "mocha", "palette": {"blue": "#89b4fa", "red": "#f38ba8"}},
+        "theme": {"name": "catppuccin-mocha", "palette": {"blue": "#89b4fa", "red": "#f38ba8"}},
         "session": {"command": null, "providers": ["[shell] multiplexer = \"tmux\""]},
         "dotfiles": "/mnt/dotfiles",
         "tools": {
@@ -279,16 +279,16 @@ mod tests {
     }
 
     #[test]
-    fn terminal_colors_come_with_the_system_flavor() {
+    fn terminal_colors_come_with_the_system_theme() {
         let other = SAMPLE.replace(
-            r##""theme": {"flavor": "mocha", "palette": {"blue": "#89b4fa", "red": "#f38ba8"}}"##,
-            r##""theme": {"flavor": "system", "palette": {"blue": "#89b4fa"}, "ansi": {"blue": 4, "text": null}}"##,
+            r##""theme": {"name": "catppuccin-mocha", "palette": {"blue": "#89b4fa", "red": "#f38ba8"}}"##,
+            r##""theme": {"name": "system", "palette": {"blue": "#89b4fa"}, "ansi": {"blue": 4, "foreground": null}}"##,
         );
         assert_ne!(other, SAMPLE, "the sample has the replaced theme");
         let config = Config::from_json(other.as_bytes()).expect("valid configuration");
-        assert_eq!(config.theme.flavor, "system");
+        assert_eq!(config.theme.name, "system");
         assert_eq!(config.theme.ansi.get("blue"), Some(&Some(4)));
-        assert_eq!(config.theme.ansi.get("text"), Some(&None));
+        assert_eq!(config.theme.ansi.get("foreground"), Some(&None));
 
         let config = Config::from_json(SAMPLE.as_bytes()).expect("valid configuration");
         assert!(config.theme.ansi.is_empty());

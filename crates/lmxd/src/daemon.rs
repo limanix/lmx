@@ -291,7 +291,7 @@ mod tests {
             "disk": {"collect_percent": 20, "minimum_percent": 10},
             "health": {"units": ["sshd.service"]},
             "network": {"ports": {"tcp": [8080], "udp": []}},
-            "theme": {"flavor": "mocha", "palette": {}},
+            "theme": {"name": "catppuccin-mocha", "palette": {}},
             "session": {"command": null, "providers": []},
             "tools": {
                 "ip": tool("ip"),

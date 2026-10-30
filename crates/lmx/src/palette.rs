@@ -10,7 +10,7 @@ use lmx_model::{Config, Theme};
 /// One color of the guest's text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Color {
-    /// 24-bit RGB, from a Catppuccin palette.
+    /// 24-bit RGB, from the theme's palette.
     Rgb(u8, u8, u8),
     /// One of the terminal's 16 colors, 0 to 15, as the terminal's theme draws it.
     Terminal(u8),
@@ -39,21 +39,21 @@ impl Color {
     }
 }
 
-/// The colors `lmx` uses, by the theme's color names.
+/// The colors `lmx` uses, by the theme's roles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Palette {
     /// `blue`: commands and the logo.
     pub(crate) blue: Color,
-    /// `mauve`: the second half of the logo.
-    pub(crate) mauve: Color,
-    /// `subtext0`: secondary values.
-    pub(crate) subtext: Color,
-    /// `overlay1`: labels.
+    /// `purple`: the second half of the logo.
+    pub(crate) purple: Color,
+    /// `subtle`: secondary values.
+    pub(crate) subtle: Color,
+    /// `muted`: labels.
     pub(crate) muted: Color,
     /// `green`: passed checks and writable shared folders.
     pub(crate) green: Color,
-    /// `peach`: read-only shared folders.
-    pub(crate) peach: Color,
+    /// `orange`: read-only shared folders.
+    pub(crate) orange: Color,
     /// `yellow`: warnings.
     pub(crate) yellow: Color,
     /// `red`: failed checks.
@@ -61,36 +61,36 @@ pub(crate) struct Palette {
 }
 
 impl Palette {
-    /// Catppuccin Mocha, the platform's palette until the declaration chooses a theme.
+    /// catppuccin-mocha's colors, the platform's palette until the declaration chooses a theme.
     pub(crate) const MOCHA: Self = Self {
         blue: Color::Rgb(137, 180, 250),
-        mauve: Color::Rgb(203, 166, 247),
-        subtext: Color::Rgb(166, 173, 200),
-        muted: Color::Rgb(127, 132, 156),
+        purple: Color::Rgb(203, 166, 247),
+        subtle: Color::Rgb(166, 173, 200),
+        muted: Color::Rgb(147, 153, 178),
         green: Color::Rgb(166, 227, 161),
-        peach: Color::Rgb(250, 179, 135),
+        orange: Color::Rgb(250, 179, 135),
         yellow: Color::Rgb(249, 226, 175),
         red: Color::Rgb(243, 139, 168),
     };
 
-    /// The terminal's own colors for the same names, as the catalog's `ansi.toml` assigns them.
+    /// The terminal's own colors for the same roles, as the catalog's `ansi.toml` assigns them.
     pub(crate) const TERMINAL: Self = Self {
         blue: Color::Terminal(4),
-        mauve: Color::Terminal(5),
-        subtext: Color::Terminal(8),
+        purple: Color::Terminal(5),
+        subtle: Color::Terminal(8),
         muted: Color::Terminal(8),
         green: Color::Terminal(2),
-        peach: Color::Terminal(11),
+        orange: Color::Terminal(11),
         yellow: Color::Terminal(3),
         red: Color::Terminal(1),
     };
 
-    /// The palette of `theme`. With the `system` flavor, each color is the terminal color that
+    /// The palette of `theme`. With the `system` theme, each color is the terminal color that
     /// `ansi` names, or the terminal's default for `None`; a name it lacks keeps
     /// [`Palette::TERMINAL`]'s. Otherwise a color the palette lacks, or one that is not
     /// `#rrggbb`, stays Mocha's.
     pub(crate) fn of(theme: &Theme) -> Self {
-        if theme.flavor == "system" {
+        if theme.name == "system" {
             let pick = |name: &str, terminal: Color| match theme.ansi.get(name) {
                 Some(Some(index)) if *index < 16 => Color::Terminal(*index),
                 Some(None) => Color::Default,
@@ -99,11 +99,11 @@ impl Palette {
             let terminal = Self::TERMINAL;
             return Self {
                 blue: pick("blue", terminal.blue),
-                mauve: pick("mauve", terminal.mauve),
-                subtext: pick("subtext0", terminal.subtext),
-                muted: pick("overlay1", terminal.muted),
+                purple: pick("purple", terminal.purple),
+                subtle: pick("subtle", terminal.subtle),
+                muted: pick("muted", terminal.muted),
                 green: pick("green", terminal.green),
-                peach: pick("peach", terminal.peach),
+                orange: pick("orange", terminal.orange),
                 yellow: pick("yellow", terminal.yellow),
                 red: pick("red", terminal.red),
             };
@@ -118,11 +118,11 @@ impl Palette {
         let mocha = Self::MOCHA;
         Self {
             blue: pick("blue", mocha.blue),
-            mauve: pick("mauve", mocha.mauve),
-            subtext: pick("subtext0", mocha.subtext),
-            muted: pick("overlay1", mocha.muted),
+            purple: pick("purple", mocha.purple),
+            subtle: pick("subtle", mocha.subtle),
+            muted: pick("muted", mocha.muted),
             green: pick("green", mocha.green),
-            peach: pick("peach", mocha.peach),
+            orange: pick("orange", mocha.orange),
             yellow: pick("yellow", mocha.yellow),
             red: pick("red", mocha.red),
         }
@@ -230,10 +230,10 @@ mod tests {
     #[test]
     fn takes_the_themes_colors_and_keeps_mocha_for_the_rest() {
         let theme = Theme {
-            flavor: "latte".into(),
+            name: "solarized-light".into(),
             palette: [
                 ("blue", "#1e66f5"),
-                ("peach", "not a color"),
+                ("orange", "not a color"),
                 ("green", "#40A02B"),
             ]
             .into_iter()
@@ -244,8 +244,8 @@ mod tests {
         let palette = Palette::of(&theme);
         assert_eq!(palette.blue, Color::Rgb(30, 102, 245));
         assert_eq!(palette.green, Color::Rgb(64, 160, 43));
-        assert_eq!(palette.peach, Palette::MOCHA.peach);
-        assert_eq!(palette.mauve, Palette::MOCHA.mauve);
+        assert_eq!(palette.orange, Palette::MOCHA.orange);
+        assert_eq!(palette.purple, Palette::MOCHA.purple);
         assert_eq!(
             Palette::of_config(&Err("unreadable".into())),
             Palette::MOCHA
@@ -253,16 +253,16 @@ mod tests {
     }
 
     #[test]
-    fn the_system_flavor_draws_in_the_terminals_colors() {
+    fn the_system_theme_draws_in_the_terminals_colors() {
         let theme = Theme {
-            flavor: "system".into(),
+            name: "system".into(),
             palette: [("blue".to_owned(), "#89b4fa".to_owned())]
                 .into_iter()
                 .collect(),
             ansi: [
                 ("blue", Some(12)),
-                ("mauve", Some(5)),
-                ("subtext0", None),
+                ("purple", Some(5)),
+                ("subtle", None),
                 ("red", Some(16)),
             ]
             .into_iter()
@@ -271,8 +271,8 @@ mod tests {
         };
         let palette = Palette::of(&theme);
         assert_eq!(palette.blue, Color::Terminal(12));
-        assert_eq!(palette.mauve, Color::Terminal(5));
-        assert_eq!(palette.subtext, Color::Default);
+        assert_eq!(palette.purple, Color::Terminal(5));
+        assert_eq!(palette.subtle, Color::Default);
         assert_eq!(palette.red, Palette::TERMINAL.red);
         assert_eq!(palette.green, Palette::TERMINAL.green);
 
@@ -280,9 +280,9 @@ mod tests {
             enabled: true,
             palette,
         };
-        assert_eq!(paint.color(palette.mauve, "lmx"), "\x1b[35mlmx\x1b[0m");
+        assert_eq!(paint.color(palette.purple, "lmx"), "\x1b[35mlmx\x1b[0m");
         assert_eq!(paint.color(palette.blue, "lmx"), "\x1b[94mlmx\x1b[0m");
-        assert_eq!(paint.color(palette.subtext, "lmx"), "lmx");
+        assert_eq!(paint.color(palette.subtle, "lmx"), "lmx");
         assert_eq!(Paint::plain().color(palette.blue, "lmx"), "lmx");
     }
 }
