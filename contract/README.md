@@ -1,310 +1,134 @@
 # Host contract
 
-The LimaNix host runs `sudo lmx <command> --json` over management SSH and reads
-one JSON answer from standard output. This page defines contract version 1.
+Version 1 of the JSON interface between the LimaNix client and `lmx`. The client
+runs `sudo lmx <command> --json` over management SSH.
 
-> [!NOTE]
->
-> This page is for people who change the LimaNix client or build their own tools
-> on top of `lmx`. For day-to-day use, start with
-> [The lmx command](https://docs.limanix.dev/inside/lmx).
+For command usage, see the [lmx guide](https://docs.limanix.dev/inside/lmx) and
+[command reference](https://docs.limanix.dev/reference/lmx).
 
-## Read one answer
+## Responses
 
-Every `--json` answer is a single line with the same envelope:
+Most commands return one JSON object on one line:
 
 ```json
 {"contract": 1, "ok": true, "data": {}}
 {"contract": 1, "ok": false, "error": {"code": "disk.low", "message": "…", "details": {}}}
 ```
 
-| Field | Meaning |
+- Check `contract` before decoding the payload; reject unsupported versions.
+- `ok: true` requires non-null `data`; `ok: false` requires non-null `error`.
+- Use `error.code` in code and `error.message` for display. `details` is
+  optional.
+- In status, `null` means unavailable; `[]` means a known empty list. A missing
+  generation marker also gives `null`, without a problem record.
+- A command that returns no envelope has failed.
+
+`lmx apply --follow --json` returns an event stream followed by the final
+response; see [Apply](#apply).
+
+## Commands and examples
+
+Payload types and error codes are defined in
+[lmx-model](../crates/lmx-model/src/). The examples below are checked by Rust
+tests.
+
+| Command | Result | Examples |
+| -- | -- | -- |
+| `status` | Generations, disk, interfaces, failed units and daemon state | [Complete](v1/status.json), [partial](v1/status-partial.json) |
+| `status --wait converged -g GENERATION` | Status once the requested generation is booted, healthy and finalized | [Finalize failed](v1/wait-finalize-failed.json) |
+| `store reserve` | `before`, `after`, `freed_bytes`, `collected` | [Enough room](v1/store-reserve.json), [disk low](v1/store-reserve-disk-low.json) |
+| `apply -g GENERATION` | `generation` and `state`: `running` or `restart_required` | [Built](v1/apply-restart-required.json), [build failed](v1/apply-build-failed.json), [mismatch](v1/apply-generation-mismatch.json), [followed](v1/apply-follow.jsonl) |
+| `apply cancel -g GENERATION` | `cancelled`: whether a matching apply was running | [Cancelled](v1/apply-cancel.json) |
+| `doctor` | `checks` with findings and hints | [Doctor](v1/doctor.json) |
+| `net check PORT` | `port`, `protocol` and `checks` | [Port check](v1/net-check.json) |
+| `version` | Binary `version` and `contract` version | [Version](v1/version.json) |
+
+`doctor` and `net check` use the same check records: `check`, `status`,
+`message` and optional `hint`. Status is `ok`, `warning`, `failed` or `unknown`.
+Only `failed` makes the command exit with status 1; `unknown` means the caller
+lacks permission to check. Their successful JSON envelope still carries the
+findings in `data.checks`.
+
+## Status and convergence
+
+Compare `generations.desired` (selected by the host), `built` (system profile)
+and `booted` (running system). Unreadable facts are reported in `problems`;
+other facts remain available even when `lmxd` cannot be reached.
+
+Generation conditions are `OutOfDate` (build needed), `RestartRequired` (restart
+needed), `Degraded` (health check failed) and `Converged` (healthy and
+finalized). `DiskLow` reports low store space.
+
+Generation conditions may be temporarily absent while finalizing. Completion
+requires an explicit `Converged`, not just the absence of failures.
+
+`FinalizeFailed` means the booted generation is healthy but cleanup or boot
+entry updates failed. The generation remains usable and `lmxd` retries later.
+The wait command returns `finalize.failed` immediately for that generation.
+Otherwise, an expired wait reports `system.degraded` or `wait.timeout`, with the
+last conditions in `error.details.conditions`. If the daemon never answers, it
+returns `owner.unavailable`.
+
+## Apply
+
+Root only. `apply` reads the requested generation under
+`/mnt/limanix/GENERATION/`: `flake/runtime.json`, `environment` and
+`environment.sh`. It checks the generation marker, validates the environment
+files, reserves store space, runs `nixos-rebuild boot`, then installs the
+environment files. After success, the host selects the generation by atomically
+replacing the relative symlink `/mnt/limanix/current`; a VM restart boots it.
+
+The operation belongs to `lmxd`: disconnecting does not cancel it. Applying the
+same generation joins the running operation; applying another cancels and
+replaces it. `apply cancel` waits for the matching operation to stop.
+
+Apply is not atomic across the system profile, boot entries and environment
+files. A failed or cancelled build leaves the installed environment unchanged,
+but may already have changed the profile and boot entries. After a successful
+build, environment installation completes even if cancellation arrives; an
+installation failure is reported as `apply.environment_failed`. Reapplying the
+generation repairs the profile, boot entries and environment.
+
+With `--follow --json`, stdout is JSON Lines: events first, the final response
+last. A follower joining a running operation receives subsequent events and the
+outcome. Success returns `state: restart_required`.
+
+| Event | Fields |
 | -- | -- |
-| `contract` | Contract version. A host that does not know the version must not decode the rest. |
-| `ok` | `true` selects `data`; `false` selects `error`. |
-| `data` | Command-specific result. |
-| `error` | `code` for programs, `message` for people, optional `details` for code-specific values. |
+| `phase` | `phase`: `reserve`, `build`, `environment` |
+| `output` | `stream`: `stdout` or `stderr`; `line`; optional `truncated: true` |
+| `warning` | `code`, `message`; the operation continues |
+| `lagged` | `skipped`: number of missed events |
 
-A host decodes an answer in this order:
+## Store reserve
 
-1. Read `contract`. If the version is unknown, stop: the rest cannot be decoded.
-1. Read `ok`. An answer with `ok: true` and no `data`, or with `ok: false` and
-   no `error`, is a protocol error.
-1. Treat an unknown error `code` as a generic failure and show its `message`.
-1. Ignore a condition `type` or an operation `kind` you do not know.
-1. Keep `[]` and `null` apart: an empty list is a fact that was read, and `null`
-   is a fact that was not.
+Root only. Collects unreferenced Nix store paths when free space is below the
+platform's collection threshold, and waits for completion. Calls share an
+existing collection; disconnecting does not stop it. `disk.low` means space is
+still below the platform minimum afterwards; the host treats it as a warning
+because the update may still succeed.
 
-A command that writes no answer, for example after a usage error or a lost
-connection, has failed.
-
-## Interpret the exit status
+## Exit status
 
 | Status | Meaning |
 | -- | -- |
 | `0` | Success |
-| `1` | The operation failed; see the JSON answer, or standard error when no answer was written |
+| `1` | Operation failed or diagnostic checks found a failure; read the JSON response |
 | `2` | Usage error |
-| `3` | The guest owner daemon is unavailable |
-| `130` | The apply was cancelled (`apply.cancelled`) |
-
-## Error codes
-
-| Code | Meaning |
-| -- | -- |
-| `owner.unavailable` | `lmxd` is not reachable |
-| `apply.build_failed` | `nixos-rebuild` failed for the requested generation |
-| `apply.cancelled` | The operation was cancelled by an explicit request |
-| `apply.environment_failed` | The environment files of the generation could not be installed |
-| `disk.low` | Free bytes or inodes are below the platform minimum |
-| `disk.unreadable` | The usage of the store file system cannot be read |
-| `permission.denied` | The caller is not allowed to run the operation |
-| `generation.mismatch` | The mounted inputs belong to a different generation than requested |
-| `system.degraded` | The booted generation failed its health check |
-| `wait.timeout` | A wait ended before its condition held |
-| `finalize.failed` | The finalize of the booted generation failed; the generation works |
-
-`lmx status` without `--wait`, `lmx version`, `lmx doctor` and `lmx net check`
-do not use these codes or the exit statuses `3` and `130`. Owner operations,
-`lmx store reserve`, `lmx apply`, `lmx apply cancel` and `lmx status --wait`,
-use exit status `3` when `lmxd` is unavailable. Only `lmx apply` uses exit
-status `130`.
-
-## `lmx status`
-
-`data` describes the guest. Every fact is optional: an unreadable fact is `null`
-and its reason is listed in `problems`.
-
-| Field | Meaning |
-| -- | -- |
-| `generations` | `desired` (selected at `/mnt/limanix/current`), `built` (system profile), `booted` (running system) |
-| `disk` | `bytes`, `free_bytes` (including the root reserve), `available_bytes`, `inodes`, `free_inodes` |
-| `interfaces` | `name`, lowercase `mac` (`null` without a hardware address), and global-scope `ipv4` addresses of each interface |
-| `failed_units` | Names of failed systemd units |
-| `owner` | The guest owner daemon: `version`, `conditions` (`type`, `message`), `operations` (`task`, `kind`, `phase`, `created_at`) |
-| `problems` | `fact` and `message` for each fact that could not be read in full; omitted when empty |
-
-A problem's `fact` names the field that is `null` or incomplete, or is `config`
-when `/etc/lmx/config.json` cannot be read. `owner` is `null` with an `owner`
-problem when `lmxd` does not answer within two seconds; the other facts are
-still answered. Its conditions are computed when it is asked:
-
-| Condition | When |
-| -- | -- |
-| `OutOfDate` | The selected generation is not built: an apply is needed |
-| `RestartRequired` | The selected generation is built but not booted: a restart is needed |
-| `Degraded` | The selected generation is booted and failed its last health check; the message gives the reason |
-| `Converged` | The selected generation is booted, healthy and finalized: older generations and their boot entries are gone |
-| `FinalizeFailed` | The selected generation is booted and passed its last health check, but its finalize failed: removing the older generations or rewriting their boot entries; the message gives the reason, and `lmxd` tries again later |
-| `DiskLow` | Less than the platform minimum of the store disk is free |
-
-Without a selected generation there is no generation condition. A booted
-generation that is healthy and still keeps older generations has none either:
-`lmxd` is about to remove them, and a `SystemFinalize` operation shows it. After
-`lmxd` starts, it finalizes a healthy generation once even without older
-generations, which rewrites the boot entries; until then there is no generation
-condition either. When the finalize fails, the generation is `FinalizeFailed`
-until a later try succeeds; while a try runs there is no generation condition,
-and a `SystemFinalize` operation shows it. An operation's `created_at` is when
-it was requested, in Unix milliseconds. Without the configuration, `ip` and
-`systemctl` are looked up in `PATH`, and a `config` problem marks the answer as
-degraded.
-
-A generation is `null` when its stage has no valid marker, for example on a
-system built before `lmx` existed. A marker that exists but cannot be read also
-gives `null` and adds a `generations` problem. The host compares the three
-generations to tell whether a build or a restart is still needed.
-
-Examples: [complete](v1/status.json), [partial](v1/status-partial.json).
-
-## `lmx store reserve`
-
-Root only. The host runs it before building an update. `lmxd` collects
-unreferenced store paths when less than the collect threshold (20%) of the store
-disk is free, and waits for the collection; a collection already running is
-shared. Interrupting the command does not stop the collection.
-
-`data` has `before` and `after`, store disk usage objects as in `lmx status`,
-`freed_bytes`, and `collected`.
-
-| Error code | When |
-| -- | -- |
-| `disk.low` | Less than the platform minimum (10%) is still free afterwards; `details` has `before`, `after`, `freed_bytes`, and `collect_error` when the collection failed |
-| `disk.unreadable` | The usage of the store file system cannot be read |
-| `permission.denied` | The caller is not root |
-| `owner.unavailable` | `lmxd` cannot be reached; exit status `3` |
-
-The host treats `disk.low` as a warning: the update may still succeed.
-
-Examples: [enough room](v1/store-reserve.json),
-[disk low](v1/store-reserve-disk-low.json).
-
-## `lmx status --wait converged -g GENERATION`
-
-The host runs it after it restarts the VM into a new generation. `lmx` asks
-`lmxd` every two seconds until it reports `Converged` and the booted generation
-is `GENERATION`, then answers as `lmx status` does. A `FinalizeFailed` of the
-booted `GENERATION` ends the wait at once with `finalize.failed`: the generation
-works, and `lmxd` tries the finalize again later. A daemon that does not answer
-yet, as right after the restart, is waited for. `--timeout` limits the wait,
-such as `90s`, `10m` or `1h`; the default is 10 minutes.
-
-| Error code | When |
-| -- | -- |
-| `finalize.failed` | The generation is booted and `FinalizeFailed`: answered at once, because the generation works; the message gives the reason |
-| `system.degraded` | At the timeout, the generation is `Degraded`; the message gives the reason |
-| `wait.timeout` | At the timeout, the generation is not converged for another reason |
-| `owner.unavailable` | `lmxd` never answered; exit status `3` |
-
-`details` of `finalize.failed`, `system.degraded` and `wait.timeout` has
-`conditions`, the conditions `lmxd` reported last.
-
-Example: [finalize failed](v1/wait-finalize-failed.json).
-
-## `lmx apply -g GENERATION`
-
-Root only. The host mounts its `generations/` directory at `/mnt/limanix`. The
-requested generation supplies `flake/runtime.json`, `environment` and
-`environment.sh` under `/mnt/limanix/GENERATION/`. `GENERATION` must match that
-directory's marker. After a successful apply, the host atomically replaces the
-relative `current` symlink to select the generation reported by status.
-
-`lmxd` checks both environment files, makes room in the store as
-`lmx store reserve` does, then builds the generation for the next boot with
-`nixos-rebuild boot`. The build receives its environment directly from the
-requested generation's inputs, except `PATH`, which stays the system's. Only
-after a successful build does `lmxd` install the environment files into
-`/etc/limanix`. A failed or cancelled build leaves the installed environment
-unchanged. Once the build succeeds, environment installation completes even if
-cancellation was requested meanwhile. If installation fails after the build, the
-system profile and boot entries may already have changed; apply is not an atomic
-transaction across the boot loader and environment files. A build that fails or
-is cancelled after `nixos-rebuild` switched the system profile may also leave
-the profile and the boot entries on the new generation: `built` then names a
-generation the host did not select, `lmx status` reports `OutOfDate`, and the
-next boot may start that generation with the previous environment files.
-Applying a generation again repairs both. Applying a generation that is already
-built runs `nixos-rebuild boot` again: it reuses the built system and writes the
-boot entries again.
-
-The apply belongs to `lmxd`: interrupting the command does not stop it, and
-running the command again attaches to the running apply. An apply of another
-generation is cancelled and replaced.
-
-Without `--follow`, the answer comes at once. `data` has `generation` and
-`state`: `running`, or `restart_required` when the apply it joined has already
-succeeded.
-
-With `--follow`, the command waits for the outcome. `--json` then writes JSON
-Lines: one line per event, and the envelope last.
-
-| `event` | Fields |
-| -- | -- |
-| `phase` | `phase`: `reserve`, `build`, then `environment` |
-| `output` | `stream` (`stdout` or `stderr`) and `line`, a line of the build; `truncated: true` when the line was cut |
-| `warning` | `code` and `message` of a problem that does not stop the apply, such as `disk.low` from the reserve |
-| `lagged` | `skipped`: the follower fell behind and missed that many events |
-
-A follower that attaches to a running apply receives the events from then on,
-and always the outcome. On success the envelope's `state` is `restart_required`:
-restart the VM to boot the generation.
-
-| Error code | When |
-| -- | -- |
-| `generation.mismatch` | The candidate directory's marker does not match `GENERATION`, or is not read within five seconds; `details` has `requested` and `mounted` (the candidate marker, or `null` without one) |
-| `apply.environment_failed` | The environment files cannot be installed |
-| `apply.build_failed` | `nixos-rebuild` failed; `details` has `exit_code` when it exited, and `disk` with the store disk usage when the disk is full |
-| `apply.cancelled` | `lmx apply cancel` or an apply of another generation stopped the apply; exit status `130` |
-| `permission.denied` | The caller is not root |
-| `owner.unavailable` | `lmxd` cannot be reached, or it stopped before the apply ended; exit status `3` |
-
-Without `--json`, the command prints the build's lines on their own streams and
-a closing sentence.
-
-Examples: [built](v1/apply-restart-required.json),
-[build failed](v1/apply-build-failed.json), [followed](v1/apply-follow.jsonl),
-[mismatch](v1/apply-generation-mismatch.json).
-
-## `lmx apply cancel -g GENERATION`
-
-Root only. The host runs it when the person stops an update. `lmxd` cancels the
-apply of `GENERATION` and answers once it has stopped. A cancelled build ends
-its followers with `apply.cancelled`; a build that already succeeded finishes
-installing its environment and reports success. A running build is killed; a
-boot loader update that `nixos-rebuild` started finishes in its own unit.
-
-`data` has `cancelled`: `true` when an apply of the generation was running,
-`false` when none was.
-
-| Error code | When |
-| -- | -- |
-| `permission.denied` | The caller is not root |
-| `owner.unavailable` | `lmxd` cannot be reached; exit status `3` |
-
-Example: [cancelled](v1/apply-cancel.json).
-
-## `lmx doctor`
-
-`lmx doctor` diagnoses the guest owner and works without `lmxd`. `data.checks`
-lists check records in the order the checks ran:
-
-| Field | Meaning |
-| -- | -- |
-| `check` | Stable name of the check, such as `owner` |
-| `status` | `ok`, `warning`, `failed`, or `unknown` |
-| `message` | The finding, for people |
-| `hint` | What to do next; omitted when there is nothing to do |
-
-`unknown` means the caller lacks the privileges to check, and the hint says to
-use `sudo`. The exit status is `1` when any check failed; a warning does not
-fail the command.
-
-| Check | Finds |
-| -- | -- |
-| `config` | Whether `/etc/lmx/config.json` is readable and valid |
-| `owner` | Whether `lmxd` answers, and whether its version is the version of `lmx` |
-| `generations` | The generation conditions of `lmxd`, such as `RestartRequired`, or what the markers say without `lmxd` |
-| `disk` | `DiskLow`, when `lmxd` reports it |
-| `dotfiles` | Only when `limanix.toml` names dotfiles: whether their entries are linked into the home of the development account. A `warning` names the paths in the way; `failed` means the directory is not mounted or cannot be read |
-
-Example: [doctor](v1/doctor.json).
-
-## `lmx net check PORT`
-
-`lmx net check PORT [--udp]` checks why a port of the VM may be unreachable from
-the Mac. `data` has `port`, `protocol` (`tcp` or `udp`) and `checks`, check
-records as in `lmx doctor`, with the same exit status.
-
-| Check | Finds |
-| -- | -- |
-| `firewall` | Whether the guest firewall opens the port for its protocol; TCP 22 is always open for SSH, and Docker publishes ports with its own rules |
-| `listener` | Whether something listens on the port, and whether only on a loopback address |
-| `process` | Which process holds the socket, and which user created it; Docker's proxy is a warning, because `network.ports` does not control what Docker publishes |
-
-Without a listener there is no `process` check. The VM's address and a
-connection from the Mac belong to `limanix net check` on the host.
-
-Example: [net check](v1/net-check.json).
-
-## `lmx version`
-
-`data` has `version`, the release version of the binary, and `contract`, the
-contract version it speaks.
-
-Example: [version](v1/version.json).
+| `3` | `lmxd` unavailable for `apply`, `apply cancel`, `store reserve` or `status --wait` |
+| `130` | Apply cancelled (`apply.cancelled`) |
 
 ## Change the host contract
 
-- Adding an optional field, a new command or a new error code is compatible and
-  keeps the version. Hosts treat an unknown code as a generic failure.
-- A new `event` of `lmx apply --follow` is compatible too: hosts skip events
-  they do not know. A new `phase` or `state` of `lmx apply` needs a new contract
-  version.
-- A new condition `type` or operation `kind` is compatible: hosts ignore the
-  ones they do not know, and a condition's `message` is for people.
-- Renaming, removing or changing the meaning of a field needs a new contract
-  version.
-- Every version keeps its examples in `contract/v<version>/`; tests decode and
-  re-encode them without loss.
-- The LimaNix client pins an `lmx` release and tests its decoders against that
-  release's examples.
+- Optional fields, new commands, error codes, events, condition types and
+  operation kinds are compatible additions. Readers ignore unknown fields,
+  events, condition types and operation kinds; an unknown error code is a
+  generic failure whose message can be displayed.
+- Renaming, removing or changing a field's meaning requires a new contract
+  version. New apply phases or states also require a version change.
+- Keep each version's examples in `contract/v<version>/` and update its tests.
+  Rust tests decode and re-encode the examples without loss; the client tests
+  its decoders against the release it pins.
+
+Follow the [contribution guide](https://docs.limanix.dev/contributing/) for
+cross-repository changes and release order.

@@ -1,62 +1,48 @@
 [![Release](https://img.shields.io/github/v/release/limanix/lmx)](https://github.com/limanix/lmx/releases)
 [![License: Apache-2.0](https://img.shields.io/github/license/limanix/lmx?label=license)](LICENSE)
 
-<p align="center">
-  <img src=".github/assets/readme-header.png"
-       alt="LimaNix lmx"
-       width="100%">
-</p>
+<div align="center">
+<img src=".github/assets/readme-header.png" alt="LimaNix" width="100%">
 
 <p align="center">
-  <a href="https://docs.limanix.dev"><b>Docs</b></a>
-  &nbsp;|&nbsp;
-  <a href="https://docs.limanix.dev/inside/lmx"><b>Using lmx</b></a>
-  &nbsp;|&nbsp;
-  <a href="https://docs.limanix.dev/reference/lmx"><b>Command reference</b></a>
-  &nbsp;|&nbsp;
-  <a href="https://docs.limanix.dev/architecture"><b>How it works</b></a>
-  &nbsp;|&nbsp;
-  <a href="https://github.com/limanix/lmx/releases"><b>Releases</b></a>
+<a href="https://docs.limanix.dev/quick-start"><code>→ Get started</code></a>
+<a href="https://docs.limanix.dev/"><code>Documentation</code></a>
+<a href="https://docs.limanix.dev/contributing/"><code>Contributing</code></a>
 </p>
 
-<hr>
+<p align="center"><sub>macOS 26 or newer | Apple Silicon and Intel</sub></p>
+</div>
 
-The guest side of [LimaNix](https://limanix.dev), which runs NixOS development
-VMs on a Mac. [`limanix`](https://github.com/limanix/client) creates and updates
-a VM from one file, the [catalog](https://github.com/limanix/modules) gives it
-shells, toolchains and services, and `lmx` runs it from the inside. Every VM
-comes with `lmx`; there is nothing to install.
+## Guest tools and daemon
 
-```text
-     Mac                       ┌─ VM (NixOS) ───────────────────────────────┐
-┌───────────┐   SSH, --json    │ ┌───────────┐  local socket  ┌───────────┐ │
-│  limanix  │ ─────────────────┼>│    lmx    │ ─────────────> │   lmxd    │ │
-└───────────┘                  │ └───────────┘                └───────────┘ │
-                               │       ^                                    │
-                               │  your shell                                │
-                               └────────────────────────────────────────────┘
-```
+`lmx` and `lmxd`, the guest command and daemon for
+[LimaNix](https://limanix.dev). Inspect and maintain your NixOS development VM
+from the inside. Both are included in every LimaNix VM.
 
-| Part | What it does |
-| -- | -- |
-| `lmx` | The command in the VM, for you and for `limanix`: the welcome, `lmx status`, `lmx doctor`, `lmx help`, dotfile links and the Mac clipboard |
-| `lmxd` | A root daemon: builds each new system, checks it after the restart, removes the old one and keeps the Nix store from filling the disk |
-| [Host contract](contract/README.md) | The versioned JSON that `limanix` reads from `lmx`, with examples in `contract/v1` |
-| [Command reference](reference.json) | The commands of `lmx` and the checks they report, built from the code for the LimaNix site; `task reference/fix` updates it |
+- **Explore your environment.** View VM status with `lmx status` and find
+  commands provided by enabled modules with `lmx help`.
+- **Diagnose problems.** Check guest health and network ports, and inspect
+  daemon task logs.
+- **Manage system updates.** `lmxd` builds system generations for the next boot,
+  checks their health after restart and reclaims unused Nix store paths.
+- **Work across Mac and VM.** Use the Mac clipboard through your terminal, link
+  configured dotfiles and open named sessions through a configured provider.
+
+Read the [lmx guide](https://docs.limanix.dev/inside/lmx) and
+[command reference](https://docs.limanix.dev/reference/lmx). Release archives
+are available on [GitHub Releases](https://github.com/limanix/lmx/releases).
 
 ## Development
 
-Every check runs in the container that CI uses; you need
-[Task](https://taskfile.dev) 3.53.1 or newer and Docker. `task --list` shows the
-checks, and `task release/build ARCH=aarch64` builds a release archive in
-`dist/`. A tag `v<version>` on `main` publishes the archives for `aarch64` and
-`x86_64`; the client then pins the release in its `lmx.json`.
+> Requires [Task](https://taskfile.dev) 3.53.1+ and Docker.
+
+Run Rust tests with `task ci/rust/test`; use `task -l` to list checks and build
+commands.
+
+Check Markdown with `task ci/markdown/fmt`; format it with `task markdown/fix`.
 
 ## Contributing
 
-Follow [CONTRIBUTING.md](CONTRIBUTING.md) for the work in this repository and
-the
-[organization guide](https://github.com/limanix/.github/blob/main/CONTRIBUTING.md)
-for issues and release labels. Use
-[Issues](https://github.com/limanix/lmx/issues) for questions, bug reports and
-feature requests. Licensed under [Apache 2.0](LICENSE).
+See the [contribution guide](https://docs.limanix.dev/contributing/) for issues,
+pull requests and releases, and the [host contract](contract/README.md) for the
+JSON interface between the client and guest.
